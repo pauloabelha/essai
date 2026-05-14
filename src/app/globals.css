@@ -182,6 +182,7 @@ button:focus-visible {
 .quick-links button,
 .file-row,
 .context-stack button,
+.thought-pane button,
 .search-results button {
   justify-content: flex-start;
   width: 100%;
@@ -425,6 +426,13 @@ summary {
   padding: 0 0 16px;
 }
 
+.thought-pane {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .current-notes-panel {
   background: color-mix(in srgb, var(--accent) 5%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--rule));
@@ -440,11 +448,51 @@ summary {
   color: var(--accent);
 }
 
-.context-stack h2 {
+.context-stack h2,
+.thought-pane h2 {
   font-size: 12px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--muted);
+}
+
+.persistent-thought-box {
+  margin-top: auto;
+  border-top: 1px solid var(--rule);
+  padding-top: 14px;
+}
+
+.persistent-thought-box textarea {
+  width: 100%;
+  min-height: 210px;
+  resize: vertical;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 12px;
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 17px;
+  line-height: 1.55;
+  outline: none;
+}
+
+.persistent-thought-box textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--rule));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.persistent-thought-box button {
+  margin-top: 8px;
+  justify-content: center;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.quiet-process {
+  border-top: 1px solid var(--rule);
+  padding-top: 10px;
 }
 
 .suggestion {

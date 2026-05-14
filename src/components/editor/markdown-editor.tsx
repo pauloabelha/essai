@@ -34,11 +34,14 @@ export function MarkdownEditor({
             fontFamily:
               'var(--font-mono), "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
             lineHeight: "1.75",
-            padding: "52px max(28px, calc((100vw - 980px) / 2))",
+            padding: "52px 0",
             color: "var(--ink)",
             caretColor: "var(--ink)",
-            maxWidth: "980px",
+            width: "min(920px, calc(100% - 96px))",
             margin: "0 auto",
+          },
+          ".cm-line": {
+            padding: "0",
           },
           ".cm-scroller": {
             fontFamily: "inherit",

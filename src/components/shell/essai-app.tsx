@@ -1,13 +1,12 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import type { Dispatch, SetStateAction } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import type { Dispatch, RefObject, SetStateAction } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
   BookOpen,
   ChevronDown,
-  Crosshair,
   FilePlus,
   FolderPlus,
   Maximize2,
@@ -50,7 +49,6 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
   const [bookId, setBookId] = useState(initialBooks[0]?.id ?? "");
   const [files, setFiles] = useState<FileNode[]>([]);
   const [openPath, setOpenPath] = useState("README.md");
-  const [loaded, setLoaded] = useState<LoadedFile | null>(null);
   const [draft, setDraft] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [viewMode, setViewMode] = useState<ViewMode>("write");
@@ -59,12 +57,12 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Array<{ path: string; snippet: string }>>([]);
   const [commandOpen, setCommandOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState<AiSuggestion[]>([]);
   const [newBookTitle, setNewBookTitle] = useState("");
   const [quickThoughtOpen, setQuickThoughtOpen] = useState(false);
   const [quickThought, setQuickThought] = useState("");
   const [captureStatus, setCaptureStatus] = useState("");
   const [currentNotesCount, setCurrentNotesCount] = useState(0);
+  const quickThoughtRef = useRef<HTMLTextAreaElement | null>(null);
   const { theme, setTheme } = useTheme();
 
   const activeBook = books.find((book) => book.id === bookId);
@@ -88,11 +86,9 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
       const response = await fetch(`/api/books/${bookId}/files/${encodeURIComponentPath(path)}`);
       if (!response.ok) return;
       const file = (await response.json()) as LoadedFile;
-      setLoaded(file);
       setDraft(file.content);
       setOpenPath(path);
       setSaveState("saved");
-      setSuggestions([]);
     },
     [bookId],
   );
@@ -138,6 +134,14 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
     setSaveState("dirty");
   }, []);
 
+  const focusQuickThought = useCallback(() => {
+    if (quickThoughtRef.current && !focusMode && viewMode !== "read") {
+      quickThoughtRef.current.focus();
+      return;
+    }
+    setQuickThoughtOpen(true);
+  }, [focusMode, viewMode]);
+
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const mod = event.metaKey || event.ctrlKey;
@@ -161,7 +165,7 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
       }
       if (key === "n" && event.shiftKey) {
         event.preventDefault();
-        setQuickThoughtOpen(true);
+        focusQuickThought();
       }
       if (key === "b") {
         event.preventDefault();
@@ -174,7 +178,7 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [saveFile, wrapSelection]);
+  }, [focusQuickThought, saveFile, wrapSelection]);
 
   const allFiles = useMemo(() => flattenNodes(files).filter((file) => file.kind === "file"), [files]);
   const hasCurrentNotes = allFiles.some((file) => file.path.endsWith("/inbox/current-notes.md"));
@@ -249,7 +253,8 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
     if (openPath === "inbox/current-notes.md") {
       await loadFile(openPath);
     }
-    setQuickThoughtOpen(false);
+    if (quickThoughtOpen) setQuickThoughtOpen(false);
+    window.requestAnimationFrame(() => quickThoughtRef.current?.focus());
     window.setTimeout(() => setCaptureStatus(""), 1600);
   }
 
@@ -276,7 +281,8 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
       body: JSON.stringify({ kind, path: openPath, content: draft }),
     });
     const result = (await response.json()) as { suggestions: AiSuggestion[] };
-    setSuggestions(result.suggestions);
+    setCaptureStatus(result.suggestions.length ? "Suggestions noted." : "Nothing to process.");
+    window.setTimeout(() => setCaptureStatus(""), 1600);
   }
 
   function onDraftChange(value: string) {
@@ -373,9 +379,6 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
           ) : null}
 
           <div className="quick-actions">
-            <button className="thought-link" onClick={() => setQuickThoughtOpen(true)}>
-              <Crosshair size={15} /> Thought
-            </button>
             <button onClick={() => createNote("inbox")}>
               <FilePlus size={15} /> Note
             </button>
@@ -462,21 +465,22 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
       </section>
 
       {viewMode !== "read" && !focusMode ? (
-        <aside className="right-pane" aria-label="Context">
-          <ContextPanel
-            loaded={loaded}
-            suggestions={suggestions}
+        <aside className="right-pane" aria-label="Thought capture">
+          <ThoughtCapturePane
+            value={quickThought}
+            onChange={setQuickThought}
+            onCommit={commitQuickThought}
+            textareaRef={quickThoughtRef}
             currentNotesCount={currentNotesCount}
             hasCurrentNotes={hasCurrentNotes}
             onAi={askAi}
-            onOpen={loadFile}
             onOpenCurrentNotes={openCurrentNotes}
           />
         </aside>
       ) : null}
 
       {viewMode !== "read" ? (
-        <button className="floating-thought" onClick={() => setQuickThoughtOpen(true)}>
+        <button className="floating-thought" onClick={focusQuickThought}>
           <Plus size={18} /> Thought
         </button>
       ) : null}
@@ -503,7 +507,7 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
             if (command === "write") setViewMode("write");
             if (command === "preview") setViewMode("preview");
             if (command === "focus") setFocusMode((value) => !value);
-            if (command === "quick-thought") setQuickThoughtOpen(true);
+            if (command === "quick-thought") focusQuickThought();
             if (command === "current-notes") openCurrentNotes();
             if (command === "new-note") createNote("inbox");
             if (command.startsWith("insert:")) insertSnippet(command.slice(7), setDraft, setSaveState);
@@ -520,25 +524,27 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
   );
 }
 
-function ContextPanel({
-  loaded,
-  suggestions,
+function ThoughtCapturePane({
+  value,
+  onChange,
+  onCommit,
+  textareaRef,
   currentNotesCount,
   hasCurrentNotes,
   onAi,
-  onOpen,
   onOpenCurrentNotes,
 }: {
-  loaded: LoadedFile | null;
-  suggestions: AiSuggestion[];
+  value: string;
+  onChange: (value: string) => void;
+  onCommit: () => void;
+  textareaRef: RefObject<HTMLTextAreaElement | null>;
   currentNotesCount: number;
   hasCurrentNotes: boolean;
   onAi: (kind: string) => void;
-  onOpen: (path: string) => void;
   onOpenCurrentNotes: () => void;
 }) {
   return (
-    <div className="context-stack">
+    <div className="thought-pane">
       <section className="current-notes-panel">
         <h2>Current Notes</h2>
         {hasCurrentNotes ? (
@@ -555,48 +561,28 @@ function ContextPanel({
           </>
         )}
       </section>
-      <section>
-        <h2>Outgoing links</h2>
-        {loaded?.analysis.outgoing.length ? (
-          loaded.analysis.outgoing.map((link) => <p key={link.raw}>{link.target}</p>)
-        ) : (
-          <p className="muted">No wiki links yet.</p>
-        )}
+      <section className="persistent-thought-box">
+        <p className="eyebrow">Thought</p>
+        <textarea
+          ref={textareaRef}
+          autoFocus
+          aria-label="Thought input"
+          placeholder="Catch it here. Submit, clear, keep moving."
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => {
+            if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
+              event.preventDefault();
+              onCommit();
+            }
+          }}
+        />
+        <button onClick={onCommit}>Submit</button>
+        <p className="muted">Saved to inbox/current-notes.md</p>
       </section>
-      <section>
-        <h2>Backlinks</h2>
-        {loaded?.analysis.backlinks.length ? (
-          loaded.analysis.backlinks.map((link) => (
-            <button key={link.path} onClick={() => onOpen(link.path)}>
-              {link.path}
-            </button>
-          ))
-        ) : (
-          <p className="muted">No backlinks.</p>
-        )}
-      </section>
-      <section>
-        <h2>Broken links</h2>
-        {loaded?.analysis.broken.length ? (
-          loaded.analysis.broken.map((link) => <p key={link.raw}>{link.target}</p>)
-        ) : (
-          <p className="muted">All wiki links resolve.</p>
-        )}
-      </section>
-      <section>
-        <h2>AI suggestions</h2>
-        <div className="ai-actions">
-          <button onClick={() => onAi("summarize-note")}>Summary</button>
-          <button onClick={() => onAi("suggest-links")}>Links</button>
-          <button onClick={() => onAi("extract-claims")}>Claims</button>
-        </div>
-        {suggestions.map((suggestion) => (
-          <article key={suggestion.id} className="suggestion">
-            <strong>{suggestion.title}</strong>
-            <p>{suggestion.rationale}</p>
-            {suggestion.diff ? <pre>{suggestion.diff}</pre> : null}
-          </article>
-        ))}
+      <section className="quiet-process">
+        <h2>Later</h2>
+        <button onClick={() => onAi("reindex-inbox")}>Process thoughts</button>
       </section>
     </div>
   );

@@ -9,10 +9,10 @@ test("create project, capture thought, write, focus, read, and navigate wiki lin
   await expect(page.locator(".workspace")).toHaveClass(/mode-write/);
   await expect(page.locator(".preview-shell")).toHaveCount(0);
 
-  await page.keyboard.press(process.platform === "darwin" ? "Meta+Shift+N" : "Control+Shift+N");
-  await page.getByLabel("Quick thought").fill("A captured thought for later.");
-  await page.keyboard.press("Enter");
+  await page.getByLabel("Thought input").fill("A captured thought for later.");
+  await page.getByRole("button", { name: "Submit" }).click();
   await expect(page.getByText("Captured.")).toBeVisible();
+  await expect(page.getByLabel("Thought input")).toHaveValue("");
   await page.getByRole("button", { name: "Current Notes", exact: true }).click();
   await expect(page.locator(".cm-content")).toContainText("A captured thought for later.");
 

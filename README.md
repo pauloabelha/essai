@@ -26,7 +26,9 @@ Focus mode hides both sidebars when the page needs to become only the text.
 
 ## Quick Thought Capture
 
-Use `Cmd/Ctrl+Shift+N` or the Thought button to capture a fragment immediately. The textarea focuses at once. Press `Enter` or `Cmd/Ctrl+Enter` to capture, `Shift+Enter` for a line break, and `Escape` to close.
+The right pane is reserved for capture. It contains a persistent **Thought** box, focused by default, so a fragment can be written immediately without opening a modal. Press **Submit** to append the thought, clear the box, and keep writing the next one. `Cmd/Ctrl+Shift+N` returns focus to the Thought box.
+
+On narrow screens or when focus mode hides the sidebars, the floating Thought button opens the same capture flow.
 
 Quick thoughts append to:
 
