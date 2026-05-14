@@ -12,6 +12,40 @@ The canonical manuscript is sacred. Every word in `manuscript/` is written by th
 
 The aim is restraint: readable typography, durable files, fast navigation, and an interface that feels closer to an editorial room than a productivity dashboard.
 
+## Writing Workflow
+
+Essai opens in **Write** mode: one central Markdown editor, no permanent preview, and as much calm space as possible for drafting.
+
+The three modes are:
+
+- **Write**: the default writing desk. Editor only.
+- **Preview**: rendered Markdown for checking structure and links. A split preview can be toggled when needed.
+- **Read**: immersive, magazine-style reading with sidebars and editing chrome hidden.
+
+Focus mode hides both sidebars when the page needs to become only the text.
+
+## Quick Thought Capture
+
+Use `Cmd/Ctrl+Shift+N` or the Thought button to capture a fragment immediately. The textarea focuses at once. Press `Enter` or `Cmd/Ctrl+Enter` to capture, `Shift+Enter` for a line break, and `Escape` to close.
+
+Quick thoughts append to:
+
+```txt
+inbox/current-notes.md
+```
+
+If the file does not exist, Essai creates it. Each capture is appended as:
+
+```md
+## YYYY-MM-DD HH:mm
+
+<thought>
+
+---
+```
+
+Older projects may still contain `inbox/random-thoughts.md`. Essai keeps those files readable and does not delete them. New projects prefer `current-notes.md`.
+
 ## Architecture
 
 - Next.js App Router with TypeScript.
@@ -58,6 +92,7 @@ data/
       README.md
       manuscript/
       inbox/
+        current-notes.md
       concepts/
       objects/
       essays/
@@ -102,8 +137,18 @@ npm run format    # Prettier
 - `Cmd/Ctrl+K`: command palette
 - `Cmd/Ctrl+P`: quick open
 - `Cmd/Ctrl+R`: reading mode
+- `Cmd/Ctrl+Shift+N`: quick thought
+- `Cmd/Ctrl+.`: focus mode
 - `Cmd/Ctrl+B`: bold selected text
 - `Cmd/Ctrl+I`: italic selected text
+
+Slash helpers are available in the command palette and through lightweight editor expansion:
+
+- `/claim`
+- `/source`
+- `/concept`
+- `/object`
+- `/question`
 
 ## AI Boundaries
 

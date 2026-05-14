@@ -45,7 +45,8 @@ The manuscript is written only by the human author. AI may organize notes and su
 
 ## Folder structure
 - manuscript/ contains canonical draft material.
-- inbox/ receives fragments before classification.
+- inbox/current-notes.md receives quick, unprocessed thoughts before classification.
+- inbox/ may also contain older or specialized inbox files.
 - concepts/ defines ideas that recur across the work.
 - objects/ gathers historical, technical, or material examples.
 - essays/ holds exploratory prose outside the sacred manuscript.
@@ -54,7 +55,7 @@ The manuscript is written only by the human author. AI may organize notes and su
 
 ## Workflow
 - Draft in manuscript/
-- Dump fragments into inbox/
+- Capture fragments into inbox/current-notes.md
 - Refine concepts/
 - Ground claims in sources/
 - Use AI only for organization
@@ -68,9 +69,9 @@ _Every word in this manuscript is written by the human author._
 
 AI suggestions for manuscript files belong here as reviewable proposals only. Never paste text into manuscript/main.md unless the human author accepts it manually.
 `,
-    "inbox/random-thoughts.md": `# Random thoughts
+    "inbox/current-notes.md": `# Current Notes
 
-- Place unsorted fragments here.
+Fast captures live here until the author decides where they belong.
 `,
     "concepts/procedural-externalization.md": `# Procedural externalization
 

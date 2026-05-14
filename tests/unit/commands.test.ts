@@ -11,6 +11,10 @@ const commands = [
   "Extract claims",
   "Open README",
   "Open manuscript",
+  "Quick Thought",
+  "Open Current Notes",
+  "Toggle focus mode",
+  "/claim",
 ];
 
 describe("command palette actions", () => {
@@ -18,5 +22,7 @@ describe("command palette actions", () => {
     expect(commands).toContain("Save");
     expect(commands).toContain("Toggle reading mode");
     expect(commands).toContain("Extract claims");
+    expect(commands).toContain("Quick Thought");
+    expect(commands).toContain("/claim");
   });
 });

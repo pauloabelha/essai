@@ -1,15 +1,17 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import type { Dispatch, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Archive,
   BookOpen,
   ChevronDown,
+  Crosshair,
   FilePlus,
   FolderPlus,
+  Maximize2,
   Moon,
-  PanelRight,
   Plus,
   Save,
   Search,
@@ -20,6 +22,8 @@ import {
 import { useTheme } from "next-themes";
 import { MarkdownView } from "@/components/reading/markdown-view";
 import type { AiSuggestion } from "@/lib/ai/types";
+import { expandSlashCommand, slashSnippets } from "@/lib/editor/slash";
+import { countThoughtBlocks } from "@/lib/projects/current-notes";
 import type { BookMetadata } from "@/lib/projects/templates";
 import type { FileNode } from "@/lib/storage/types";
 
@@ -29,7 +33,7 @@ const MarkdownEditor = dynamic(
 );
 
 type SaveState = "saved" | "dirty" | "saving";
-type ViewMode = "edit" | "preview" | "split" | "read";
+type ViewMode = "write" | "preview" | "read";
 
 interface LoadedFile {
   path: string;
@@ -49,12 +53,18 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
   const [loaded, setLoaded] = useState<LoadedFile | null>(null);
   const [draft, setDraft] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("saved");
-  const [viewMode, setViewMode] = useState<ViewMode>("split");
+  const [viewMode, setViewMode] = useState<ViewMode>("write");
+  const [splitPreview, setSplitPreview] = useState(false);
+  const [focusMode, setFocusMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<Array<{ path: string; snippet: string }>>([]);
   const [commandOpen, setCommandOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<AiSuggestion[]>([]);
   const [newBookTitle, setNewBookTitle] = useState("");
+  const [quickThoughtOpen, setQuickThoughtOpen] = useState(false);
+  const [quickThought, setQuickThought] = useState("");
+  const [captureStatus, setCaptureStatus] = useState("");
+  const [currentNotesCount, setCurrentNotesCount] = useState(0);
   const { theme, setTheme } = useTheme();
 
   const activeBook = books.find((book) => book.id === bookId);
@@ -143,7 +153,15 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
       }
       if (key === "r") {
         event.preventDefault();
-        setViewMode((mode) => (mode === "read" ? "split" : "read"));
+        setViewMode((mode) => (mode === "read" ? "write" : "read"));
+      }
+      if (key === ".") {
+        event.preventDefault();
+        setFocusMode((value) => !value);
+      }
+      if (key === "n" && event.shiftKey) {
+        event.preventDefault();
+        setQuickThoughtOpen(true);
       }
       if (key === "b") {
         event.preventDefault();
@@ -159,6 +177,19 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
   }, [saveFile, wrapSelection]);
 
   const allFiles = useMemo(() => flattenNodes(files).filter((file) => file.kind === "file"), [files]);
+  const hasCurrentNotes = allFiles.some((file) => file.path.endsWith("/inbox/current-notes.md"));
+
+  useEffect(() => {
+    if (!bookId || !hasCurrentNotes) {
+      setCurrentNotesCount(0);
+      return;
+    }
+    fetch(`/api/books/${bookId}/files/${encodeURIComponentPath("inbox/current-notes.md")}`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((file: LoadedFile | null) => {
+        if (file) setCurrentNotesCount(countThoughtBlocks(file.content));
+      });
+  }, [bookId, hasCurrentNotes, files]);
 
   async function createNewBook(titleFromForm?: string) {
     const title = titleFromForm || window.prompt("Book title");
@@ -185,6 +216,41 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
     });
     await loadFiles();
     await loadFile(path);
+  }
+
+  async function openCurrentNotes() {
+    if (!bookId) return;
+    if (!hasCurrentNotes) {
+      await fetch(`/api/books/${bookId}/files`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          path: "inbox/current-notes.md",
+          content: "# Current Notes\n\nFast captures live here until they are processed.\n\n",
+        }),
+      });
+      await loadFiles();
+    }
+    await loadFile("inbox/current-notes.md");
+  }
+
+  async function commitQuickThought() {
+    if (!bookId || !quickThought.trim()) return;
+    const response = await fetch(`/api/books/${bookId}/quick-thought`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ thought: quickThought }),
+    });
+    const result = (await response.json()) as { count: number };
+    setCurrentNotesCount(result.count);
+    setQuickThought("");
+    setCaptureStatus("Captured.");
+    await loadFiles();
+    if (openPath === "inbox/current-notes.md") {
+      await loadFile(openPath);
+    }
+    setQuickThoughtOpen(false);
+    window.setTimeout(() => setCaptureStatus(""), 1600);
   }
 
   async function archiveCurrentBook() {
@@ -214,7 +280,7 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
   }
 
   function onDraftChange(value: string) {
-    setDraft(value);
+    setDraft(expandSlashCommand(value));
     setSaveState("dirty");
   }
 
@@ -258,8 +324,16 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
   }
 
   return (
-    <main className={viewMode === "read" ? "app-frame reading-active" : "app-frame"}>
-      {viewMode !== "read" ? (
+    <main
+      className={[
+        "app-frame",
+        viewMode === "read" ? "reading-active" : "",
+        focusMode ? "focus-active" : "",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {viewMode !== "read" && !focusMode ? (
         <aside className="left-pane" aria-label="Files">
           <div className="brand-row">
             <div>
@@ -299,6 +373,9 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
           ) : null}
 
           <div className="quick-actions">
+            <button className="thought-link" onClick={() => setQuickThoughtOpen(true)}>
+              <Crosshair size={15} /> Thought
+            </button>
             <button onClick={() => createNote("inbox")}>
               <FilePlus size={15} /> Note
             </button>
@@ -308,6 +385,9 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
           </div>
 
           <nav className="quick-links">
+            <button className="current-notes-link" onClick={openCurrentNotes}>
+              Current Notes
+            </button>
             {["README.md", "manuscript/main.md", "inbox/random-thoughts.md", "sources/Books.md", "sources/Papers.md", "sources/Claims.md"].map(
               (path) => (
                 <button key={path} onClick={() => loadFile(path)}>
@@ -341,13 +421,26 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
             <button title="Save" onClick={saveFile}>
               <Save size={16} />
             </button>
-            <button title="Split view" onClick={() => setViewMode("split")}>
-              <SplitSquareHorizontal size={16} />
+            <div className="mode-switch" aria-label="Writing mode">
+              <button className={viewMode === "write" ? "active" : ""} onClick={() => setViewMode("write")}>
+                Write
+              </button>
+              <button className={viewMode === "preview" ? "active" : ""} onClick={() => setViewMode("preview")}>
+                Preview
+              </button>
+              <button className={viewMode === "read" ? "active read-mode" : "read-mode"} onClick={() => setViewMode("read")}>
+                Read
+              </button>
+            </div>
+            {viewMode === "preview" ? (
+              <button title="Split preview" onClick={() => setSplitPreview((value) => !value)}>
+                <SplitSquareHorizontal size={16} />
+              </button>
+            ) : null}
+            <button title="Focus mode" onClick={() => setFocusMode((value) => !value)}>
+              <Maximize2 size={16} />
             </button>
-            <button title="Preview" onClick={() => setViewMode("preview")}>
-              <PanelRight size={16} />
-            </button>
-            <button className="read-button" onClick={() => setViewMode(viewMode === "read" ? "split" : "read")}>
+            <button className="read-button" onClick={() => setViewMode(viewMode === "read" ? "write" : "read")}>
               <BookOpen size={16} /> Read
             </button>
             <button title="Theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
@@ -359,24 +452,44 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
         {viewMode === "read" ? (
           <MarkdownView markdown={draft} reading onWikiClick={openWikiTarget} />
         ) : (
-          <div className={`workspace mode-${viewMode}`}>
-            {viewMode !== "preview" ? <MarkdownEditor value={draft} onChange={onDraftChange} /> : null}
-            {viewMode !== "edit" ? (
+          <div className={`workspace mode-${viewMode} ${splitPreview ? "with-split" : ""}`}>
+            {viewMode === "write" || splitPreview ? <MarkdownEditor value={draft} onChange={onDraftChange} /> : null}
+            {viewMode === "preview" ? (
               <MarkdownView markdown={draft} onWikiClick={openWikiTarget} />
             ) : null}
           </div>
         )}
       </section>
 
-      {viewMode !== "read" ? (
+      {viewMode !== "read" && !focusMode ? (
         <aside className="right-pane" aria-label="Context">
           <ContextPanel
             loaded={loaded}
             suggestions={suggestions}
+            currentNotesCount={currentNotesCount}
+            hasCurrentNotes={hasCurrentNotes}
             onAi={askAi}
             onOpen={loadFile}
+            onOpenCurrentNotes={openCurrentNotes}
           />
         </aside>
+      ) : null}
+
+      {viewMode !== "read" ? (
+        <button className="floating-thought" onClick={() => setQuickThoughtOpen(true)}>
+          <Plus size={18} /> Thought
+        </button>
+      ) : null}
+
+      {captureStatus ? <div className="capture-toast">{captureStatus}</div> : null}
+
+      {quickThoughtOpen ? (
+        <QuickThoughtModal
+          value={quickThought}
+          onChange={setQuickThought}
+          onClose={() => setQuickThoughtOpen(false)}
+          onCommit={commitQuickThought}
+        />
       ) : null}
 
       {commandOpen ? (
@@ -387,8 +500,13 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
             setCommandOpen(false);
             if (command === "save") saveFile();
             if (command === "read") setViewMode("read");
+            if (command === "write") setViewMode("write");
             if (command === "preview") setViewMode("preview");
+            if (command === "focus") setFocusMode((value) => !value);
+            if (command === "quick-thought") setQuickThoughtOpen(true);
+            if (command === "current-notes") openCurrentNotes();
             if (command === "new-note") createNote("inbox");
+            if (command.startsWith("insert:")) insertSnippet(command.slice(7), setDraft, setSaveState);
             if (command === "reindex") askAi("reindex-inbox");
             if (command === "links") askAi("suggest-links");
             if (command === "claims") askAi("extract-claims");
@@ -405,16 +523,38 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
 function ContextPanel({
   loaded,
   suggestions,
+  currentNotesCount,
+  hasCurrentNotes,
   onAi,
   onOpen,
+  onOpenCurrentNotes,
 }: {
   loaded: LoadedFile | null;
   suggestions: AiSuggestion[];
+  currentNotesCount: number;
+  hasCurrentNotes: boolean;
   onAi: (kind: string) => void;
   onOpen: (path: string) => void;
+  onOpenCurrentNotes: () => void;
 }) {
   return (
     <div className="context-stack">
+      <section className="current-notes-panel">
+        <h2>Current Notes</h2>
+        {hasCurrentNotes ? (
+          <>
+            <p className="notes-count">{currentNotesCount}</p>
+            <p className="muted">Captured thoughts waiting safely.</p>
+            <button onClick={onOpenCurrentNotes}>Open Current Notes</button>
+            <button onClick={() => onAi("reindex-inbox")}>Process thoughts</button>
+          </>
+        ) : (
+          <>
+            <p className="muted">No current notes file yet.</p>
+            <button onClick={onOpenCurrentNotes}>Create Current Notes</button>
+          </>
+        )}
+      </section>
       <section>
         <h2>Outgoing links</h2>
         {loaded?.analysis.outgoing.length ? (
@@ -473,13 +613,22 @@ function CommandPalette({
 }) {
   const [query, setQuery] = useState("");
   const commands = [
+    ["write", "Write mode"],
+    ["preview", "Preview mode"],
+    ["read", "Read mode"],
     ["save", "Save"],
+    ["quick-thought", "Quick Thought"],
+    ["current-notes", "Open Current Notes"],
+    ["focus", "Toggle focus mode"],
     ["new-note", "New note"],
-    ["read", "Toggle reading mode"],
-    ["preview", "Toggle preview"],
     ["reindex", "Reindex inbox"],
     ["links", "Suggest links"],
     ["claims", "Extract claims"],
+    ["insert:claim", "/claim"],
+    ["insert:source", "/source"],
+    ["insert:concept", "/concept"],
+    ["insert:object", "/object"],
+    ["insert:question", "/question"],
     ["readme", "Open README"],
     ["manuscript", "Open manuscript"],
     ...files.map((file) => [`file:${file.path.replace(/^data\/books\/[^/]+\//, "")}`, file.path.replace(/^data\/books\/[^/]+\//, "")]),
@@ -497,6 +646,44 @@ function CommandPalette({
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function QuickThoughtModal({
+  value,
+  onChange,
+  onClose,
+  onCommit,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onClose: () => void;
+  onCommit: () => void;
+}) {
+  return (
+    <div className="thought-backdrop" onClick={onClose}>
+      <section className="thought-sheet" onClick={(event) => event.stopPropagation()}>
+        <p className="eyebrow">Quick Thought</p>
+        <textarea
+          autoFocus
+          aria-label="Quick thought"
+          placeholder="Write the thought before it disappears."
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") onClose();
+            if (event.key === "Enter" && (!event.shiftKey || event.metaKey || event.ctrlKey)) {
+              event.preventDefault();
+              onCommit();
+            }
+          }}
+        />
+        <div className="thought-actions">
+          <span>Enter captures. Shift+Enter makes a line.</span>
+          <button onClick={onCommit}>Capture</button>
+        </div>
+      </section>
     </div>
   );
 }
@@ -526,4 +713,15 @@ function flattenNodes(nodes: FileNode[]): FileNode[] {
 
 function encodeURIComponentPath(path: string) {
   return path.split("/").map(encodeURIComponent).join("/");
+}
+
+function insertSnippet(
+  command: string,
+  setDraft: Dispatch<SetStateAction<string>>,
+  setSaveState: Dispatch<SetStateAction<SaveState>>,
+) {
+  const snippet = slashSnippets[command];
+  if (!snippet) return;
+  setDraft((value) => `${value.trimEnd()}\n\n${snippet}`);
+  setSaveState("dirty");
 }

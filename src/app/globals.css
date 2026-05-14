@@ -52,7 +52,7 @@ button {
 
 .app-frame {
   display: grid;
-  grid-template-columns: 292px minmax(0, 1fr) 300px;
+  grid-template-columns: 238px minmax(0, 1fr) 258px;
   height: 100vh;
   background: var(--paper);
 }
@@ -61,13 +61,17 @@ button {
   display: block;
 }
 
+.app-frame.focus-active {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .left-pane,
 .right-pane {
   min-height: 0;
   overflow: auto;
   border-color: var(--rule);
   background: color-mix(in srgb, var(--surface) 88%, var(--paper));
-  padding: 18px;
+  padding: 14px;
 }
 
 .left-pane {
@@ -157,6 +161,14 @@ button:focus-visible {
 
 .quick-actions {
   margin-bottom: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.quick-actions .thought-link {
+  grid-column: 1 / -1;
+  justify-content: flex-start;
+  border-color: color-mix(in srgb, var(--accent) 28%, var(--rule));
 }
 
 .quick-links,
@@ -183,6 +195,11 @@ button:focus-visible {
   border-bottom: 1px solid var(--rule);
   padding: 12px 0;
   margin-bottom: 12px;
+}
+
+.current-notes-link {
+  color: var(--accent);
+  font-weight: 650;
 }
 
 .search-results {
@@ -221,8 +238,8 @@ summary {
 }
 
 .topbar {
-  min-height: 58px;
-  padding: 10px 18px;
+  min-height: 54px;
+  padding: 8px 16px;
   border-bottom: 1px solid var(--rule);
   background: color-mix(in srgb, var(--surface) 92%, var(--paper));
 }
@@ -239,10 +256,35 @@ summary {
 }
 
 .read-button {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
+  background: color-mix(in srgb, var(--accent) 11%, var(--surface));
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--rule));
+  color: var(--accent);
   padding-inline: 12px;
+}
+
+.mode-switch {
+  display: inline-flex;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  overflow: hidden;
+  background: var(--paper);
+}
+
+.mode-switch button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 13px;
+  padding: 7px 10px;
+}
+
+.mode-switch button.active {
+  background: var(--surface-2);
+  color: var(--accent);
+}
+
+.mode-switch .read-mode {
+  font-weight: 650;
 }
 
 .save-state {
@@ -262,11 +304,11 @@ summary {
   display: grid;
 }
 
-.workspace.mode-split {
+.workspace.mode-preview.with-split {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
 
-.workspace.mode-edit,
+.workspace.mode-write,
 .workspace.mode-preview {
   grid-template-columns: minmax(0, 1fr);
 }
@@ -277,15 +319,15 @@ summary {
 
 .preview-shell {
   overflow: auto;
-  padding: 42px min(6vw, 72px);
+  padding: 48px min(8vw, 96px);
 }
 
 .reading-shell {
   min-height: 100vh;
-  padding: 8vh max(24px, calc((100vw - 1180px) / 2));
+  padding: 9vh max(28px, calc((100vw - 1200px) / 2));
   background: var(--paper);
   display: grid;
-  grid-template-columns: 220px minmax(0, 740px);
+  grid-template-columns: 210px minmax(0, 72ch);
   gap: 64px;
 }
 
@@ -319,10 +361,10 @@ summary {
 }
 
 .prose-reading {
-  max-width: 740px;
+  max-width: 72ch;
   font-family: var(--font-serif), Georgia, serif;
-  font-size: 21px;
-  line-height: 1.86;
+  font-size: 20px;
+  line-height: 1.9;
 }
 
 .prose-preview h1,
@@ -383,6 +425,21 @@ summary {
   padding: 0 0 16px;
 }
 
+.current-notes-panel {
+  background: color-mix(in srgb, var(--accent) 5%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--rule));
+  border-radius: 7px;
+  padding: 12px !important;
+}
+
+.notes-count {
+  margin: 0;
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 42px;
+  line-height: 1;
+  color: var(--accent);
+}
+
 .context-stack h2 {
   font-size: 12px;
   letter-spacing: 0.12em;
@@ -437,6 +494,71 @@ summary {
   border-color: transparent;
 }
 
+.thought-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: grid;
+  place-items: end center;
+  padding: 28px;
+  background: rgb(0 0 0 / 0.22);
+}
+
+.thought-sheet {
+  width: min(680px, 100%);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  box-shadow: var(--shadow);
+  padding: 18px;
+}
+
+.thought-sheet textarea {
+  width: 100%;
+  min-height: 150px;
+  resize: vertical;
+  border: 0;
+  border-top: 1px solid var(--rule);
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  padding: 16px 0;
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 20px;
+  line-height: 1.6;
+  outline: none;
+}
+
+.thought-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding-top: 12px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.capture-toast {
+  position: fixed;
+  left: 50%;
+  bottom: 28px;
+  z-index: 40;
+  transform: translateX(-50%);
+  border: 1px solid var(--rule);
+  border-radius: 999px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  padding: 9px 14px;
+  color: var(--accent);
+  font-size: 13px;
+}
+
+.floating-thought {
+  display: none;
+}
+
 .empty-state {
   min-height: 100vh;
   display: grid;
@@ -471,18 +593,18 @@ summary {
 
 @media (max-width: 1050px) {
   .app-frame {
-    grid-template-columns: 238px minmax(0, 1fr);
+    grid-template-columns: 220px minmax(0, 1fr);
   }
 
   .right-pane {
     display: none;
   }
 
-  .workspace.mode-split {
+  .workspace.mode-preview.with-split {
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .workspace.mode-split .preview-shell {
+  .workspace.mode-preview.with-split .preview-shell {
     display: none;
   }
 }
@@ -501,6 +623,22 @@ summary {
     justify-content: flex-end;
   }
 
+  .read-button {
+    display: none;
+  }
+
+  .floating-thought {
+    position: fixed;
+    right: 18px;
+    bottom: 18px;
+    z-index: 15;
+    display: inline-flex;
+    border-color: var(--accent);
+    background: var(--accent);
+    color: var(--accent-ink);
+    box-shadow: var(--shadow);
+  }
+
   .reading-shell {
     display: block;
     padding: 34px 22px;
@@ -516,5 +654,13 @@ summary {
 
   .prose-reading {
     font-size: 19px;
+  }
+
+  .thought-backdrop {
+    padding: 12px;
+  }
+
+  .thought-sheet {
+    border-radius: 8px 8px 0 0;
   }
 }
