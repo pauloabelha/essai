@@ -527,6 +527,38 @@ summary {
   justify-content: center;
 }
 
+.source-kind-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.source-kind-pills button {
+  min-height: 30px;
+  border-radius: 999px;
+  padding: 6px 10px;
+  color: var(--muted);
+  font-size: 12px;
+  text-transform: lowercase;
+}
+
+.source-kind-pills button.active,
+.source-kind-pills button[aria-checked="true"] {
+  border-color: color-mix(in srgb, var(--accent) 58%, var(--rule));
+  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
+  color: var(--accent);
+}
+
+.pdf-upload-actions {
+  display: grid;
+  margin-top: 9px;
+}
+
+.pdf-upload-actions button {
+  justify-content: center;
+}
+
 .pdf-source-box input[type="file"] {
   width: 100%;
   border: 1px dashed color-mix(in srgb, var(--muted) 45%, var(--rule));

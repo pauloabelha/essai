@@ -784,21 +784,34 @@ function InputPane({
           accept="application/pdf,.pdf"
           onChange={(event) => onPdfChange(event.target.files?.[0] ?? null)}
         />
-        <div className="source-actions">
-          <select
-            aria-label="PDF source type"
-            value={pdfKind}
-            onChange={(event) =>
-              onPdfKindChange(event.target.value as SourceKind)
-            }
-          >
-            <option value="book">book</option>
-            <option value="paper">paper</option>
-            <option value="article">article</option>
-            <option value="quote">quote</option>
-            <option value="claim">claim</option>
-            <option value="raw">raw</option>
-          </select>
+        <div
+          className="source-kind-pills"
+          aria-label="PDF source type"
+          role="radiogroup"
+        >
+          {(
+            [
+              "book",
+              "paper",
+              "article",
+              "quote",
+              "claim",
+              "raw",
+            ] satisfies SourceKind[]
+          ).map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              role="radio"
+              aria-checked={pdfKind === kind}
+              className={pdfKind === kind ? "active" : ""}
+              onClick={() => onPdfKindChange(kind)}
+            >
+              {kind}
+            </button>
+          ))}
+        </div>
+        <div className="pdf-upload-actions">
           <button onClick={onPdfUpload} disabled={!pdfFile}>
             Upload PDF
           </button>

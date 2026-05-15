@@ -31,7 +31,10 @@ test("create project, capture notes and sources, write, focus, read, and navigat
     mimeType: "application/pdf",
     buffer: Buffer.from("%PDF-1.4\n"),
   });
-  await page.getByLabel("PDF source type").selectOption("book");
+  await page
+    .getByRole("radiogroup", { name: "PDF source type" })
+    .getByRole("radio", { name: "book" })
+    .click();
   await page.getByRole("button", { name: "Upload PDF" }).click();
   await expect(page.getByText("PDF saved as book.")).toBeVisible();
   await page.getByRole("button", { name: "raw.md" }).click();
