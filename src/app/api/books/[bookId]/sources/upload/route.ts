@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { appendPdfSource, parseSourceKind } from "@/lib/projects/sources";
+import { appendSourceFile, parseSourceKind } from "@/lib/projects/sources";
 import { getServerStorage } from "@/lib/storage/server";
 
 export const dynamic = "force-dynamic";
@@ -17,22 +17,12 @@ export async function POST(
 
     if (!isUploadFile(file)) {
       return NextResponse.json(
-        { error: "PDF file is required" },
+        { error: "Source file is required" },
         { status: 400 },
       );
     }
 
-    const isPdf =
-      file.type === "application/pdf" ||
-      file.name.toLowerCase().endsWith(".pdf");
-    if (!isPdf) {
-      return NextResponse.json(
-        { error: "Only PDF sources can be uploaded" },
-        { status: 400 },
-      );
-    }
-
-    const result = await appendPdfSource(
+    const result = await appendSourceFile(
       getServerStorage(),
       bookId,
       {
@@ -45,14 +35,12 @@ export async function POST(
     return NextResponse.json(result);
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "PDF upload failed";
+      error instanceof Error ? error.message : "Source file upload failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
-function isUploadFile(
-  value: FormDataEntryValue | null,
-): value is File {
+function isUploadFile(value: FormDataEntryValue | null): value is File {
   return (
     typeof value === "object" &&
     value !== null &&

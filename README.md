@@ -82,29 +82,29 @@ When a type is selected, Essai also mirrors the entry into the appropriate file:
 - `quote` -> `sources/Quotes.md`
 - `claim` -> `sources/Claims.md`
 
-PDFs can be uploaded from the same right pane. Choose the source type before uploading. Essai stores the PDF inside the project under:
+Source files can be uploaded from the same right pane by choosing a file or dropping it onto the file target. Choose the source type before uploading. Essai stores the file inside the project under:
 
 ```txt
 sources/files/<type>/
 ```
 
-It then indexes the upload in `sources/raw.md` and mirrors the entry into the selected typed source file. The Markdown index stays readable, and the PDF remains in a portable subfolder beside the manuscript.
+It then indexes the upload in `sources/raw.md` and mirrors the entry into the selected typed source file. The Markdown index stays readable, and the file remains in a portable subfolder beside the manuscript.
 
-PDF uploads follow the same authorship rule as everything else in Essai: the PDF is archived and indexed, but its contents are not rewritten into the manuscript. A PDF source entry looks like:
+File uploads follow the same authorship rule as everything else in Essai: the file is archived and indexed, but its contents are not rewritten into the manuscript. A source file entry looks like:
 
 ```md
 ## 2026-05-15 14:30
 
 Type: paper
 
-File: [Important Paper.pdf](files/paper/20260515-143000-Important-Paper.pdf)
+File: [Important Notes.txt](files/paper/20260515-143000-Important-Notes.txt)
 
-Uploaded PDF source.
+Uploaded source file.
 
 ---
 ```
 
-The stored filename is timestamped and sanitized so source folders stay git-friendly. Unknown source types fall back to `raw`, and empty PDFs are rejected before any Markdown index is changed.
+The stored filename is timestamped and sanitized so source folders stay git-friendly. Unknown source types fall back to `raw`, and empty files are rejected before any Markdown index is changed.
 
 ## Architecture
 
@@ -193,12 +193,12 @@ Production deployments should not rely on Vercel filesystem persistence. Use the
 
 ## Source Intake Contract
 
-Text sources and PDF sources are deliberately handled as archive operations:
+Text sources and uploaded source files are deliberately handled as archive operations:
 
 - `sources/raw.md` is the chronological ledger of every source capture.
 - Typed files such as `sources/Papers.md` and `sources/Books.md` are filtered indexes.
-- Uploaded PDFs live under `sources/files/<type>/`.
-- Markdown indexes link to PDFs with relative links, so the project folder remains portable.
+- Uploaded files live under `sources/files/<type>/`.
+- Markdown indexes link to uploaded files with relative links, so the project folder remains portable.
 - AI may later classify or summarize sources, but it must not alter `main.md` without an explicit human action.
 
 The current source types are:
@@ -239,12 +239,12 @@ The test suite covers:
 - note capture into `notes.md`
 - preservation of legacy inbox files
 - text source indexing and typed mirroring
-- PDF source storage, sanitization, and Markdown indexing
+- source file storage, sanitization, and Markdown indexing
 - binary storage list/read/rename/delete behavior
 - write/preview/read mode switching
 - study mode archive investigation from `sources/`
 - focus mode
-- end-to-end note, text source, and PDF source capture
+- end-to-end note, text source, and file source capture
 
 ## Keyboard Shortcuts
 

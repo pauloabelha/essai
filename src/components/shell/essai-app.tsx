@@ -58,7 +58,7 @@ interface StudyInvestigation {
   sourceCoverage: {
     sources: number;
     chunks: number;
-    pdfs: number;
+    files: number;
     scope: string;
   };
   directReferences: StudyPassage[];
@@ -398,7 +398,7 @@ export function EssaiApp({
     window.setTimeout(() => setCaptureStatus(""), 1600);
   }
 
-  async function uploadPdfSource() {
+  async function uploadSourceFile() {
     if (!bookId || !pdfFile) return;
     const form = new FormData();
     form.append("file", pdfFile);
@@ -412,18 +412,18 @@ export function EssaiApp({
         const result = (await response.json().catch(() => null)) as {
           error?: string;
         } | null;
-        setCaptureStatus(result?.error ?? "PDF upload failed.");
+        setCaptureStatus(result?.error ?? "File upload failed.");
         window.setTimeout(() => setCaptureStatus(""), 2200);
         return;
       }
     } catch {
-      setCaptureStatus("PDF upload failed. Check the dev server.");
+      setCaptureStatus("File upload failed. Check the dev server.");
       window.setTimeout(() => setCaptureStatus(""), 2200);
       return;
     }
     setPdfFile(null);
     if (pdfInputRef.current) pdfInputRef.current.value = "";
-    setCaptureStatus(`PDF saved as ${pdfKind}.`);
+    setCaptureStatus(`File saved as ${pdfKind}.`);
     await loadFiles();
     if (openPath.startsWith("sources/")) await loadFile(openPath);
     window.setTimeout(() => setCaptureStatus(""), 1800);
@@ -742,7 +742,7 @@ export function EssaiApp({
             onSourceCommit={commitSource}
             onPdfChange={setPdfFile}
             onPdfKindChange={setPdfKind}
-            onPdfUpload={uploadPdfSource}
+            onPdfUpload={uploadSourceFile}
             notesCount={notesCount}
             hasCurrentNotes={hasCurrentNotes}
             onAi={askAi}
@@ -841,6 +841,14 @@ function InputPane({
   onAi: (kind: string) => void;
   onOpenCurrentNotes: () => void;
 }) {
+  const sourceKinds = [
+    "raw",
+    "book",
+    "paper",
+    "article",
+    "quote",
+    "claim",
+  ] satisfies SourceKind[];
   return (
     <div className="input-pane">
       <section className="notes-panel">
@@ -888,67 +896,46 @@ function InputPane({
           value={sourceValue}
           onChange={(event) => onSourceChange(event.target.value)}
         />
+        <SourceKindPills
+          label="Source type"
+          value={sourceKind}
+          kinds={sourceKinds}
+          onChange={onSourceKindChange}
+        />
         <div className="source-actions">
-          <select
-            aria-label="Source type"
-            value={sourceKind}
-            onChange={(event) =>
-              onSourceKindChange(event.target.value as SourceKind)
-            }
-          >
-            <option value="raw">raw</option>
-            <option value="book">book</option>
-            <option value="paper">paper</option>
-            <option value="article">article</option>
-            <option value="quote">quote</option>
-            <option value="claim">claim</option>
-          </select>
           <button onClick={onSourceCommit}>Commit Source</button>
         </div>
         <p className="muted">Saved to sources/raw.md and mirrored by type.</p>
       </section>
       <section className="pdf-source-box">
-        <p className="eyebrow">PDF source</p>
-        <input
-          ref={pdfInputRef}
-          aria-label="PDF source file"
-          type="file"
-          accept="application/pdf,.pdf"
-          onChange={(event) => onPdfChange(event.target.files?.[0] ?? null)}
-        />
-        <div
-          className="source-kind-pills"
-          aria-label="PDF source type"
-          role="radiogroup"
+        <p className="eyebrow">Source file</p>
+        <label
+          className="source-file-dropzone"
+          onDragOver={(event) => event.preventDefault()}
+          onDrop={(event) => {
+            event.preventDefault();
+            onPdfChange(event.dataTransfer.files?.[0] ?? null);
+          }}
         >
-          {(
-            [
-              "book",
-              "paper",
-              "article",
-              "quote",
-              "claim",
-              "raw",
-            ] satisfies SourceKind[]
-          ).map((kind) => (
-            <button
-              key={kind}
-              type="button"
-              role="radio"
-              aria-checked={pdfKind === kind}
-              className={pdfKind === kind ? "active" : ""}
-              onClick={() => onPdfKindChange(kind)}
-            >
-              {kind}
-            </button>
-          ))}
-        </div>
+          <input
+            ref={pdfInputRef}
+            aria-label="Source file"
+            type="file"
+            onChange={(event) => onPdfChange(event.target.files?.[0] ?? null)}
+          />
+          <span>{pdfFile ? pdfFile.name : "Drop a file or choose one"}</span>
+        </label>
+        <SourceKindPills
+          label="File source type"
+          value={pdfKind}
+          kinds={sourceKinds}
+          onChange={onPdfKindChange}
+        />
         <div className="pdf-upload-actions">
           <button onClick={onPdfUpload} disabled={!pdfFile}>
-            Upload PDF
+            Upload File
           </button>
         </div>
-        {pdfFile ? <p className="muted">{pdfFile.name}</p> : null}
         <p className="muted">
           Stored under sources/files and indexed in Markdown.
         </p>
@@ -957,6 +944,35 @@ function InputPane({
         <h2>Later</h2>
         <button onClick={() => onAi("reindex-inbox")}>Organize notes</button>
       </section>
+    </div>
+  );
+}
+
+function SourceKindPills({
+  label,
+  value,
+  kinds,
+  onChange,
+}: {
+  label: string;
+  value: SourceKind;
+  kinds: SourceKind[];
+  onChange: (value: SourceKind) => void;
+}) {
+  return (
+    <div className="source-kind-pills" aria-label={label} role="radiogroup">
+      {kinds.map((kind) => (
+        <button
+          key={kind}
+          type="button"
+          role="radio"
+          aria-checked={value === kind}
+          className={value === kind ? "active" : ""}
+          onClick={() => onChange(kind)}
+        >
+          {kind}
+        </button>
+      ))}
     </div>
   );
 }
@@ -983,8 +999,8 @@ function StudySidebar({
       .length,
     Quotes: archiveFiles.filter((path) => path.includes("Quotes.md")).length,
     Claims: archiveFiles.filter((path) => path.includes("Claims.md")).length,
-    "Uploaded PDFs": archiveFiles.filter((path) =>
-      path.toLowerCase().endsWith(".pdf"),
+    "Uploaded files": archiveFiles.filter((path) =>
+      path.startsWith("sources/files/"),
     ).length,
   };
   return (
@@ -1098,7 +1114,7 @@ function StudySurface({
               {investigation?.sourceCoverage.sources ?? 0} source indexes
             </span>
             <span>{investigation?.sourceCoverage.chunks ?? 0} chunks</span>
-            <span>{investigation?.sourceCoverage.pdfs ?? 0} PDFs</span>
+            <span>{investigation?.sourceCoverage.files ?? 0} files</span>
             <span>
               {investigation?.sourceCoverage.scope ?? "Preparing audit"}
             </span>
@@ -1424,7 +1440,7 @@ function sourcePathFor(label: string) {
       Articles: "sources/Articles.md",
       Quotes: "sources/Quotes.md",
       Claims: "sources/Claims.md",
-      "Uploaded PDFs": "sources/raw.md",
+      "Uploaded files": "sources/raw.md",
     }[label] ?? "sources/raw.md"
   );
 }

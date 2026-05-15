@@ -526,9 +526,7 @@ summary {
 
 .source-actions {
   display: grid;
-  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1fr);
-  gap: 8px;
-  margin-top: 8px;
+  margin-top: 10px;
 }
 
 .source-actions button {
@@ -538,15 +536,19 @@ summary {
 .source-kind-pills {
   display: flex;
   flex-wrap: wrap;
-  gap: 7px;
+  gap: 8px;
   margin-top: 10px;
 }
 
 .source-kind-pills button {
+  width: auto;
   min-height: 30px;
   border-radius: 999px;
-  padding: 6px 10px;
+  border-color: color-mix(in srgb, var(--muted) 22%, var(--rule));
+  background: transparent;
   color: var(--muted);
+  justify-content: center;
+  padding: 6px 12px;
   font-size: 12px;
   text-transform: lowercase;
 }
@@ -567,24 +569,40 @@ summary {
   justify-content: center;
 }
 
-.pdf-source-box input[type="file"] {
+.source-file-dropzone {
+  position: relative;
+  display: grid;
+  place-items: center;
   width: 100%;
   border: 1px dashed color-mix(in srgb, var(--muted) 45%, var(--rule));
   border-radius: 7px;
   background: var(--surface);
   color: var(--muted);
-  padding: 10px;
+  min-height: 82px;
+  padding: 14px;
   font-size: 13px;
+  line-height: 1.4;
+  text-align: center;
+  cursor: pointer;
 }
 
-.pdf-source-box input[type="file"]::file-selector-button {
-  margin-right: 10px;
-  border: 1px solid var(--rule);
-  border-radius: 6px;
-  background: var(--paper);
-  color: var(--ink);
-  padding: 6px 9px;
-  font: inherit;
+.source-file-dropzone:hover,
+.source-file-dropzone:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--rule));
+  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
+}
+
+.source-file-dropzone input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.source-file-dropzone span {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .pdf-source-box button:disabled {

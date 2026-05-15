@@ -52,7 +52,7 @@ The manuscript is written only by the human author. AI may organize notes and su
 - concepts/ defines ideas that recur across the work.
 - objects/ gathers historical, technical, or material examples.
 - sources/ grounds claims in books, papers, quotations, and evidence.
-- sources/files/ stores uploaded PDFs by source type.
+- sources/files/ stores uploaded files by source type.
 - drafts/ holds exploratory prose outside the canonical manuscript.
 - fragments/ keeps compressed sentences and loose formulations.
 
@@ -130,7 +130,7 @@ An exploratory essay outside the canonical manuscript.
 `,
     "sources/files/README.md": `# Source Files
 
-Uploaded PDFs are stored here by type:
+Uploaded source files are stored here by type:
 
 - book/
 - paper/

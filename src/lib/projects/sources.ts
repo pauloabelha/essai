@@ -18,7 +18,7 @@ export const SOURCE_TARGETS: Record<SourceKind, string> = {
   claim: "sources/Claims.md",
 };
 
-export interface PdfSourceFile {
+export interface SourceFile {
   name: string;
   bytes: Uint8Array;
 }
@@ -77,20 +77,20 @@ export async function appendSource(
   };
 }
 
-export async function appendPdfSource(
+export async function appendSourceFile(
   storage: StorageProvider,
   bookId: string,
-  file: PdfSourceFile,
+  file: SourceFile,
   kind: SourceKind = "raw",
   date = new Date(),
 ) {
-  if (!file.bytes.byteLength) throw new Error("PDF is empty");
+  if (!file.bytes.byteLength) throw new Error("Source file is empty");
 
-  const originalName = file.name.trim() || "source.pdf";
+  const originalName = file.name.trim() || "source-file";
   const storedName = `${fileTimestamp(date)}-${sanitizeSourceFilename(originalName)}`;
   const filePath = `sources/files/${kind}/${storedName}`;
   const sourceLink = `[${originalName}](files/${kind}/${storedName})`;
-  const value = `File: ${sourceLink}\n\nUploaded PDF source.`;
+  const value = `File: ${sourceLink}\n\nUploaded source file.`;
 
   await writeBinaryBookFile(storage, bookId, filePath, file.bytes);
   const result = await appendSource(storage, bookId, value, kind, date);
@@ -102,6 +102,8 @@ export async function appendPdfSource(
     originalName,
   };
 }
+
+export const appendPdfSource = appendSourceFile;
 
 async function appendToFile(
   storage: StorageProvider,
@@ -136,15 +138,13 @@ function titleForKind(kind: SourceKind) {
 }
 
 function sanitizeSourceFilename(name: string) {
-  const normalized = name
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .replace(/[^a-zA-Z0-9._-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
-  const withExtension = normalized.toLowerCase().endsWith(".pdf")
-    ? normalized
-    : `${normalized || "source"}.pdf`;
-  return withExtension || "source.pdf";
+  const normalized =
+    name
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-zA-Z0-9._-]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "source-file";
+  return normalized;
 }
 
 function fileTimestamp(date: Date) {

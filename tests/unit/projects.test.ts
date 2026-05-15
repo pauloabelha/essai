@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { appendNote, countNoteBlocks } from "@/lib/projects/notes";
 import { createBook, listBooks } from "@/lib/projects/service";
 import {
-  appendPdfSource,
+  appendSourceFile,
   appendSource,
   parseSourceKind,
 } from "@/lib/projects/sources";
@@ -98,55 +98,55 @@ describe("project creation", () => {
     ).toContain("Type: paper");
   });
 
-  it("stores uploaded PDFs in typed source folders and indexes them", async () => {
+  it("stores uploaded source files in typed source folders and indexes them", async () => {
     const storage = new InMemoryStorageProvider();
     await createBook(storage, "My Book");
-    const result = await appendPdfSource(
+    const result = await appendSourceFile(
       storage,
       "my-book",
       {
-        name: "Important Paper.pdf",
-        bytes: new Uint8Array([37, 80, 68, 70]),
+        name: "Important Notes.txt",
+        bytes: new Uint8Array([83, 111, 117, 114, 99, 101]),
       },
       "paper",
       new Date("2026-05-14T21:30:00Z"),
     );
 
     expect(result.filePath).toBe(
-      "sources/files/paper/20260514-213000-Important-Paper.pdf",
+      "sources/files/paper/20260514-213000-Important-Notes.txt",
     );
     expect(
       await storage.readBinaryFile?.(
-        "projects/my-book/sources/files/paper/20260514-213000-Important-Paper.pdf",
+        "projects/my-book/sources/files/paper/20260514-213000-Important-Notes.txt",
       ),
-    ).toEqual(new Uint8Array([37, 80, 68, 70]));
+    ).toEqual(new Uint8Array([83, 111, 117, 114, 99, 101]));
     expect(await storage.readFile("projects/my-book/sources/raw.md")).toContain(
-      "[Important Paper.pdf](files/paper/20260514-213000-Important-Paper.pdf)",
+      "[Important Notes.txt](files/paper/20260514-213000-Important-Notes.txt)",
     );
     expect(
       await storage.readFile("projects/my-book/sources/Papers.md"),
-    ).toContain("Uploaded PDF source.");
+    ).toContain("Uploaded source file.");
   });
 
-  it("rejects empty PDF uploads before indexing them", async () => {
+  it("rejects empty source file uploads before indexing them", async () => {
     const storage = new InMemoryStorageProvider();
     await createBook(storage, "My Book");
 
     await expect(
-      appendPdfSource(
+      appendSourceFile(
         storage,
         "my-book",
         {
-          name: "empty.pdf",
+          name: "empty.txt",
           bytes: new Uint8Array(),
         },
         "paper",
       ),
-    ).rejects.toThrow("PDF is empty");
+    ).rejects.toThrow("Source file is empty");
 
     expect(
       await storage.readFile("projects/my-book/sources/raw.md"),
-    ).not.toContain("empty.pdf");
+    ).not.toContain("empty.txt");
   });
 
   it("falls back to raw for unknown source kinds", () => {

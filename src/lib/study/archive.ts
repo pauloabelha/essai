@@ -39,7 +39,7 @@ export interface StudyInvestigation {
   sourceCoverage: {
     sources: number;
     chunks: number;
-    pdfs: number;
+    files: number;
     scope: string;
   };
   directReferences: StudyPassage[];
@@ -120,8 +120,8 @@ export async function buildStudyInvestigation(
     .map((file) => cleanPath(file.path))
     .filter((path) => path.startsWith("sources/"));
   const sourceMarkdown = sourceFiles.filter((path) => path.endsWith(".md"));
-  const pdfs = sourceFiles.filter((path) =>
-    path.toLowerCase().endsWith(".pdf"),
+  const uploadedFiles = sourceFiles.filter((path) =>
+    path.startsWith("sources/files/"),
   );
   const markdown = await Promise.all(
     sourceMarkdown.map(async (path) => ({
@@ -171,7 +171,7 @@ export async function buildStudyInvestigation(
     sourceCoverage: {
       sources: sourceMarkdown.length,
       chunks: chunks.length,
-      pdfs: pdfs.length,
+      files: uploadedFiles.length,
       scope: exhaustive
         ? "Exhaustive scholarly audit across /sources"
         : "Fast semantic search across indexed source passages",
@@ -183,7 +183,7 @@ export async function buildStudyInvestigation(
     graph: buildGraph(query, directReferences, claimReferences, relatedObjects),
     auditLog: [
       `Read ${sourceMarkdown.length} Markdown indexes from /sources.`,
-      `Identified ${pdfs.length} uploaded PDF source files.`,
+      `Identified ${uploadedFiles.length} uploaded source files.`,
       `Examined ${chunks.length} source chunks${exhaustive ? " sequentially for recall" : " with fast scoring"}.`,
       `Connected ${relatedObjects.length} related object records from /objects.`,
     ],
