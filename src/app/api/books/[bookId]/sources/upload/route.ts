@@ -9,36 +9,56 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ bookId: string }> },
 ) {
-  const { bookId } = await params;
-  const form = await request.formData();
-  const file = form.get("file");
-  const kind = parseSourceKind(form.get("kind"));
+  try {
+    const { bookId } = await params;
+    const form = await request.formData();
+    const file = form.get("file");
+    const kind = parseSourceKind(form.get("kind"));
 
-  if (!(file instanceof File)) {
-    return NextResponse.json(
-      { error: "PDF file is required" },
-      { status: 400 },
+    if (!isUploadFile(file)) {
+      return NextResponse.json(
+        { error: "PDF file is required" },
+        { status: 400 },
+      );
+    }
+
+    const isPdf =
+      file.type === "application/pdf" ||
+      file.name.toLowerCase().endsWith(".pdf");
+    if (!isPdf) {
+      return NextResponse.json(
+        { error: "Only PDF sources can be uploaded" },
+        { status: 400 },
+      );
+    }
+
+    const result = await appendPdfSource(
+      getServerStorage(),
+      bookId,
+      {
+        name: file.name,
+        bytes: new Uint8Array(await file.arrayBuffer()),
+      },
+      kind,
     );
-  }
 
-  const isPdf =
-    file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
-  if (!isPdf) {
-    return NextResponse.json(
-      { error: "Only PDF sources can be uploaded" },
-      { status: 400 },
-    );
+    return NextResponse.json(result);
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "PDF upload failed";
+    return NextResponse.json({ error: message }, { status: 500 });
   }
+}
 
-  const result = await appendPdfSource(
-    getServerStorage(),
-    bookId,
-    {
-      name: file.name,
-      bytes: new Uint8Array(await file.arrayBuffer()),
-    },
-    kind,
+function isUploadFile(
+  value: FormDataEntryValue | null,
+): value is File {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "arrayBuffer" in value &&
+    typeof value.arrayBuffer === "function" &&
+    "name" in value &&
+    typeof value.name === "string"
   );
-
-  return NextResponse.json(result);
 }

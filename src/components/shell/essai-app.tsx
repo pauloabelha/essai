@@ -403,12 +403,21 @@ export function EssaiApp({
     const form = new FormData();
     form.append("file", pdfFile);
     form.append("kind", pdfKind);
-    const response = await fetch(`/api/books/${bookId}/sources/upload`, {
-      method: "POST",
-      body: form,
-    });
-    if (!response.ok) {
-      setCaptureStatus("PDF upload failed.");
+    try {
+      const response = await fetch(`/api/books/${bookId}/sources/upload`, {
+        method: "POST",
+        body: form,
+      });
+      if (!response.ok) {
+        const result = (await response.json().catch(() => null)) as {
+          error?: string;
+        } | null;
+        setCaptureStatus(result?.error ?? "PDF upload failed.");
+        window.setTimeout(() => setCaptureStatus(""), 2200);
+        return;
+      }
+    } catch {
+      setCaptureStatus("PDF upload failed. Check the dev server.");
       window.setTimeout(() => setCaptureStatus(""), 2200);
       return;
     }
