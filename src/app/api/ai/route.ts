@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { createLocalHeuristicSuggestions, DisabledAiAssistant } from "@/lib/ai/types";
+import {
+  createLocalHeuristicSuggestions,
+  DisabledAiAssistant,
+} from "@/lib/ai/types";
 
 export async function POST(request: Request) {
   const body = (await request.json()) as { content?: string };

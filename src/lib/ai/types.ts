@@ -39,7 +39,9 @@ export class DisabledAiAssistant implements AiAssistant {
   }
 }
 
-export function createLocalHeuristicSuggestions(content: string): AiSuggestion[] {
+export function createLocalHeuristicSuggestions(
+  content: string,
+): AiSuggestion[] {
   const claims = content
     .split("\n")
     .filter((line) => /\b(is|are|causes|proves|means|therefore)\b/i.test(line))

@@ -11,6 +11,10 @@ export async function POST(request: Request) {
   if (!body.title?.trim()) {
     return NextResponse.json({ error: "Title is required" }, { status: 400 });
   }
-  const book = await createBook(getServerStorage(), body.title.trim(), body.language);
+  const book = await createBook(
+    getServerStorage(),
+    body.title.trim(),
+    body.language,
+  );
   return NextResponse.json(book, { status: 201 });
 }

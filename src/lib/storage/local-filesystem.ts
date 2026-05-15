@@ -25,10 +25,20 @@ export class LocalFilesystemStorageProvider implements StorageProvider {
     return fs.readFile(this.resolve(filePath), "utf8");
   }
 
+  async readBinaryFile(filePath: string) {
+    return fs.readFile(this.resolve(filePath));
+  }
+
   async writeFile(filePath: string, content: string) {
     const resolved = this.resolve(filePath);
     await fs.mkdir(path.dirname(resolved), { recursive: true });
     await fs.writeFile(resolved, content, "utf8");
+  }
+
+  async writeBinaryFile(filePath: string, content: Uint8Array) {
+    const resolved = this.resolve(filePath);
+    await fs.mkdir(path.dirname(resolved), { recursive: true });
+    await fs.writeFile(resolved, content);
   }
 
   async createFile(filePath: string, content = "") {
@@ -56,7 +66,9 @@ export class LocalFilesystemStorageProvider implements StorageProvider {
         .filter((entry) => !entry.name.startsWith("."))
         .sort((a, b) => a.name.localeCompare(b.name))
         .map(async (entry) => {
-          const childPath = normalizeStoragePath(path.posix.join(relativePath, entry.name));
+          const childPath = normalizeStoragePath(
+            path.posix.join(relativePath, entry.name),
+          );
           if (entry.isDirectory()) {
             return {
               name: entry.name,

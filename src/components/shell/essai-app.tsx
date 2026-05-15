@@ -1,6 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { useRouter } from "next/navigation";
 import type { Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -22,12 +23,16 @@ import { useTheme } from "next-themes";
 import { MarkdownView } from "@/components/reading/markdown-view";
 import type { AiSuggestion } from "@/lib/ai/types";
 import { expandSlashCommand, slashSnippets } from "@/lib/editor/slash";
-import { countThoughtBlocks } from "@/lib/projects/current-notes";
+import { countNoteBlocks } from "@/lib/projects/notes";
+import type { SourceKind } from "@/lib/projects/sources";
 import type { BookMetadata } from "@/lib/projects/templates";
 import type { FileNode } from "@/lib/storage/types";
 
 const MarkdownEditor = dynamic(
-  () => import("@/components/editor/markdown-editor").then((mod) => mod.MarkdownEditor),
+  () =>
+    import("@/components/editor/markdown-editor").then(
+      (mod) => mod.MarkdownEditor,
+    ),
   { ssr: false },
 );
 
@@ -44,26 +49,42 @@ interface LoadedFile {
   };
 }
 
-export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
+export function EssaiApp({
+  initialBooks,
+  initialBookId,
+}: {
+  initialBooks: BookMetadata[];
+  initialBookId?: string;
+}) {
   const [books, setBooks] = useState(initialBooks);
-  const [bookId, setBookId] = useState(initialBooks[0]?.id ?? "");
+  const [bookId, setBookId] = useState(
+    initialBookId ?? initialBooks[0]?.id ?? "",
+  );
   const [files, setFiles] = useState<FileNode[]>([]);
-  const [openPath, setOpenPath] = useState("README.md");
+  const [openPath, setOpenPath] = useState("main.md");
   const [draft, setDraft] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("saved");
   const [viewMode, setViewMode] = useState<ViewMode>("write");
   const [splitPreview, setSplitPreview] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<Array<{ path: string; snippet: string }>>([]);
+  const [searchResults, setSearchResults] = useState<
+    Array<{ path: string; snippet: string }>
+  >([]);
   const [commandOpen, setCommandOpen] = useState(false);
   const [newBookTitle, setNewBookTitle] = useState("");
-  const [quickThoughtOpen, setQuickThoughtOpen] = useState(false);
-  const [quickThought, setQuickThought] = useState("");
+  const [notesCaptureOpen, setNotesCaptureOpen] = useState(false);
+  const [noteInput, setNoteInput] = useState("");
+  const [sourceInput, setSourceInput] = useState("");
+  const [sourceKind, setSourceKind] = useState<SourceKind>("raw");
+  const [pdfFile, setPdfFile] = useState<File | null>(null);
+  const [pdfKind, setPdfKind] = useState<SourceKind>("paper");
   const [captureStatus, setCaptureStatus] = useState("");
-  const [currentNotesCount, setCurrentNotesCount] = useState(0);
-  const quickThoughtRef = useRef<HTMLTextAreaElement | null>(null);
+  const [notesCount, setNotesCount] = useState(0);
+  const noteInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const pdfInputRef = useRef<HTMLInputElement | null>(null);
   const { theme, setTheme } = useTheme();
+  const router = useRouter();
 
   const activeBook = books.find((book) => book.id === bookId);
 
@@ -83,12 +104,18 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
   const loadFile = useCallback(
     async (path: string) => {
       if (!bookId || !path) return;
-      const response = await fetch(`/api/books/${bookId}/files/${encodeURIComponentPath(path)}`);
-      if (!response.ok) return;
-      const file = (await response.json()) as LoadedFile;
-      setDraft(file.content);
-      setOpenPath(path);
-      setSaveState("saved");
+      try {
+        const response = await fetch(
+          `/api/books/${bookId}/files/${encodeURIComponentPath(path)}`,
+        );
+        if (!response.ok) return;
+        const file = (await response.json()) as LoadedFile;
+        setDraft(file.content);
+        setOpenPath(path);
+        setSaveState("saved");
+      } catch {
+        // Route transitions can cancel in-flight file reads.
+      }
     },
     [bookId],
   );
@@ -96,11 +123,14 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
   const saveFile = useCallback(async () => {
     if (!bookId || !openPath) return;
     setSaveState("saving");
-    await fetch(`/api/books/${bookId}/files/${encodeURIComponentPath(openPath)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: draft }),
-    });
+    await fetch(
+      `/api/books/${bookId}/files/${encodeURIComponentPath(openPath)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: draft }),
+      },
+    );
     await loadFile(openPath);
     setSaveState("saved");
   }, [bookId, draft, loadFile, openPath]);
@@ -121,7 +151,9 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
       return;
     }
     const handle = window.setTimeout(async () => {
-      const response = await fetch(`/api/books/${bookId}/files?q=${encodeURIComponent(searchQuery)}`);
+      const response = await fetch(
+        `/api/books/${bookId}/files?q=${encodeURIComponent(searchQuery)}`,
+      );
       setSearchResults(await response.json());
     }, 180);
     return () => window.clearTimeout(handle);
@@ -130,16 +162,18 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
   const wrapSelection = useCallback((before: string, after: string) => {
     const selected = window.getSelection()?.toString();
     if (!selected) return;
-    setDraft((value) => value.replace(selected, `${before}${selected}${after}`));
+    setDraft((value) =>
+      value.replace(selected, `${before}${selected}${after}`),
+    );
     setSaveState("dirty");
   }, []);
 
-  const focusQuickThought = useCallback(() => {
-    if (quickThoughtRef.current && !focusMode && viewMode !== "read") {
-      quickThoughtRef.current.focus();
+  const focusNotes = useCallback(() => {
+    if (noteInputRef.current && !focusMode && viewMode !== "read") {
+      noteInputRef.current.focus();
       return;
     }
-    setQuickThoughtOpen(true);
+    setNotesCaptureOpen(true);
   }, [focusMode, viewMode]);
 
   useEffect(() => {
@@ -165,7 +199,7 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
       }
       if (key === "n" && event.shiftKey) {
         event.preventDefault();
-        focusQuickThought();
+        focusNotes();
       }
       if (key === "b") {
         event.preventDefault();
@@ -178,20 +212,25 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [focusQuickThought, saveFile, wrapSelection]);
+  }, [focusNotes, saveFile, wrapSelection]);
 
-  const allFiles = useMemo(() => flattenNodes(files).filter((file) => file.kind === "file"), [files]);
-  const hasCurrentNotes = allFiles.some((file) => file.path.endsWith("/inbox/current-notes.md"));
+  const allFiles = useMemo(
+    () => flattenNodes(files).filter((file) => file.kind === "file"),
+    [files],
+  );
+  const hasCurrentNotes = allFiles.some((file) =>
+    file.path.endsWith("/notes.md"),
+  );
 
   useEffect(() => {
     if (!bookId || !hasCurrentNotes) {
-      setCurrentNotesCount(0);
+      setNotesCount(0);
       return;
     }
-    fetch(`/api/books/${bookId}/files/${encodeURIComponentPath("inbox/current-notes.md")}`)
+    fetch(`/api/books/${bookId}/files/${encodeURIComponentPath("notes.md")}`)
       .then((response) => (response.ok ? response.json() : null))
       .then((file: LoadedFile | null) => {
-        if (file) setCurrentNotesCount(countThoughtBlocks(file.content));
+        if (file) setNotesCount(countNoteBlocks(file.content));
       });
   }, [bookId, hasCurrentNotes, files]);
 
@@ -206,7 +245,8 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
     const book = (await response.json()) as BookMetadata;
     await loadBooks();
     setBookId(book.id);
-    setOpenPath("README.md");
+    setOpenPath("main.md");
+    router.push(`/projects/${book.id}`);
   }
 
   async function createNote(folder = "inbox") {
@@ -216,7 +256,10 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
     await fetch(`/api/books/${bookId}/files`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ path, content: `# ${name.replace(/\.md$/, "")}\n\n` }),
+      body: JSON.stringify({
+        path,
+        content: `# ${name.replace(/\.md$/, "")}\n\n`,
+      }),
     });
     await loadFiles();
     await loadFile(path);
@@ -229,33 +272,72 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          path: "inbox/current-notes.md",
-          content: "# Current Notes\n\nFast captures live here until they are processed.\n\n",
+          path: "notes.md",
+          content:
+            "# Notes\n\nFast captures live here until they are processed.\n\n",
         }),
       });
       await loadFiles();
     }
-    await loadFile("inbox/current-notes.md");
+    await loadFile("notes.md");
   }
 
-  async function commitQuickThought() {
-    if (!bookId || !quickThought.trim()) return;
-    const response = await fetch(`/api/books/${bookId}/quick-thought`, {
+  async function commitNote() {
+    if (!bookId || !noteInput.trim()) return;
+    const response = await fetch(`/api/books/${bookId}/notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ thought: quickThought }),
+      body: JSON.stringify({ note: noteInput }),
     });
     const result = (await response.json()) as { count: number };
-    setCurrentNotesCount(result.count);
-    setQuickThought("");
+    setNotesCount(result.count);
+    setNoteInput("");
     setCaptureStatus("Captured.");
     await loadFiles();
-    if (openPath === "inbox/current-notes.md") {
+    if (openPath === "notes.md") {
       await loadFile(openPath);
     }
-    if (quickThoughtOpen) setQuickThoughtOpen(false);
-    window.requestAnimationFrame(() => quickThoughtRef.current?.focus());
+    if (notesCaptureOpen) setNotesCaptureOpen(false);
+    window.requestAnimationFrame(() => noteInputRef.current?.focus());
     window.setTimeout(() => setCaptureStatus(""), 1600);
+  }
+
+  async function commitSource() {
+    if (!bookId || !sourceInput.trim()) return;
+    await fetch(`/api/books/${bookId}/sources`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source: sourceInput, kind: sourceKind }),
+    });
+    setSourceInput("");
+    setCaptureStatus(
+      sourceKind === "raw" ? "Source saved." : `Source saved as ${sourceKind}.`,
+    );
+    await loadFiles();
+    if (openPath.startsWith("sources/")) await loadFile(openPath);
+    window.setTimeout(() => setCaptureStatus(""), 1600);
+  }
+
+  async function uploadPdfSource() {
+    if (!bookId || !pdfFile) return;
+    const form = new FormData();
+    form.append("file", pdfFile);
+    form.append("kind", pdfKind);
+    const response = await fetch(`/api/books/${bookId}/sources/upload`, {
+      method: "POST",
+      body: form,
+    });
+    if (!response.ok) {
+      setCaptureStatus("PDF upload failed.");
+      window.setTimeout(() => setCaptureStatus(""), 2200);
+      return;
+    }
+    setPdfFile(null);
+    if (pdfInputRef.current) pdfInputRef.current.value = "";
+    setCaptureStatus(`PDF saved as ${pdfKind}.`);
+    await loadFiles();
+    if (openPath.startsWith("sources/")) await loadFile(openPath);
+    window.setTimeout(() => setCaptureStatus(""), 1800);
   }
 
   async function archiveCurrentBook() {
@@ -281,7 +363,9 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
       body: JSON.stringify({ kind, path: openPath, content: draft }),
     });
     const result = (await response.json()) as { suggestions: AiSuggestion[] };
-    setCaptureStatus(result.suggestions.length ? "Suggestions noted." : "Nothing to process.");
+    setCaptureStatus(
+      result.suggestions.length ? "Suggestions noted." : "Nothing to process.",
+    );
     window.setTimeout(() => setCaptureStatus(""), 1600);
   }
 
@@ -297,7 +381,7 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
         file.path.toLowerCase().replace(/\.md$/, "") === normalized ||
         file.name.toLowerCase().replace(/\.md$/, "") === normalized,
     );
-    if (found) loadFile(found.path.replace(`data/books/${bookId}/`, ""));
+    if (found) loadFile(cleanProjectPath(found.path, bookId));
   }
 
   if (!books.length) {
@@ -306,7 +390,10 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
         <div>
           <p className="eyebrow">essai</p>
           <h1>A writing room for a book that has not yet begun.</h1>
-          <p>Create a portable Markdown project with a human-only manuscript rule.</p>
+          <p>
+            Create a portable Markdown project with a human-only manuscript
+            rule.
+          </p>
           <form
             className="new-book-form"
             onSubmit={(event) => {
@@ -344,7 +431,14 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
           <div className="brand-row">
             <div>
               <p className="eyebrow">essai</p>
-              <select value={bookId} onChange={(event) => setBookId(event.target.value)}>
+              <select
+                value={bookId}
+                onChange={(event) => {
+                  setBookId(event.target.value);
+                  setOpenPath("main.md");
+                  router.push(`/projects/${event.target.value}`);
+                }}
+              >
                 {books.map((book) => (
                   <option key={book.id} value={book.id}>
                     {book.archived ? "[archived] " : ""}
@@ -388,19 +482,26 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
           </div>
 
           <nav className="quick-links">
-            <button className="current-notes-link" onClick={openCurrentNotes}>
-              Current Notes
+            <button className="notes-link" onClick={openCurrentNotes}>
+              Notes
             </button>
-            {["README.md", "manuscript/main.md", "inbox/random-thoughts.md", "sources/Books.md", "sources/Papers.md", "sources/Claims.md"].map(
-              (path) => (
-                <button key={path} onClick={() => loadFile(path)}>
-                  {path}
-                </button>
-              ),
-            )}
+            {[
+              "main.md",
+              "notes.md",
+              "README.md",
+              "sources/Books.md",
+              "sources/Papers.md",
+              "sources/Claims.md",
+            ].map((path) => (
+              <button key={path} onClick={() => loadFile(path)}>
+                {path}
+              </button>
+            ))}
           </nav>
 
-          <div className="file-tree">{files.map((node) => renderNode(node, bookId, loadFile))}</div>
+          <div className="file-tree">
+            {files.map((node) => renderNode(node, bookId, loadFile))}
+          </div>
 
           <div className="book-danger">
             <button onClick={archiveCurrentBook}>
@@ -425,28 +526,53 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
               <Save size={16} />
             </button>
             <div className="mode-switch" aria-label="Writing mode">
-              <button className={viewMode === "write" ? "active" : ""} onClick={() => setViewMode("write")}>
+              <button
+                className={viewMode === "write" ? "active" : ""}
+                onClick={() => setViewMode("write")}
+              >
                 Write
               </button>
-              <button className={viewMode === "preview" ? "active" : ""} onClick={() => setViewMode("preview")}>
+              <button
+                className={viewMode === "preview" ? "active" : ""}
+                onClick={() => setViewMode("preview")}
+              >
                 Preview
               </button>
-              <button className={viewMode === "read" ? "active read-mode" : "read-mode"} onClick={() => setViewMode("read")}>
+              <button
+                className={
+                  viewMode === "read" ? "active read-mode" : "read-mode"
+                }
+                onClick={() => setViewMode("read")}
+              >
                 Read
               </button>
             </div>
             {viewMode === "preview" ? (
-              <button title="Split preview" onClick={() => setSplitPreview((value) => !value)}>
+              <button
+                title="Split preview"
+                onClick={() => setSplitPreview((value) => !value)}
+              >
                 <SplitSquareHorizontal size={16} />
               </button>
             ) : null}
-            <button title="Focus mode" onClick={() => setFocusMode((value) => !value)}>
+            <button
+              title="Focus mode"
+              onClick={() => setFocusMode((value) => !value)}
+            >
               <Maximize2 size={16} />
             </button>
-            <button className="read-button" onClick={() => setViewMode(viewMode === "read" ? "write" : "read")}>
+            <button
+              className="read-button"
+              onClick={() =>
+                setViewMode(viewMode === "read" ? "write" : "read")
+              }
+            >
               <BookOpen size={16} /> Read
             </button>
-            <button title="Theme" onClick={() => setTheme(theme === "dark" ? "light" : "dark")}>
+            <button
+              title="Theme"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+            >
               {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             </button>
           </div>
@@ -455,8 +581,12 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
         {viewMode === "read" ? (
           <MarkdownView markdown={draft} reading onWikiClick={openWikiTarget} />
         ) : (
-          <div className={`workspace mode-${viewMode} ${splitPreview ? "with-split" : ""}`}>
-            {viewMode === "write" || splitPreview ? <MarkdownEditor value={draft} onChange={onDraftChange} /> : null}
+          <div
+            className={`workspace mode-${viewMode} ${splitPreview ? "with-split" : ""}`}
+          >
+            {viewMode === "write" || splitPreview ? (
+              <MarkdownEditor value={draft} onChange={onDraftChange} />
+            ) : null}
             {viewMode === "preview" ? (
               <MarkdownView markdown={draft} onWikiClick={openWikiTarget} />
             ) : null}
@@ -465,13 +595,24 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
       </section>
 
       {viewMode !== "read" && !focusMode ? (
-        <aside className="right-pane" aria-label="Thought capture">
-          <ThoughtCapturePane
-            value={quickThought}
-            onChange={setQuickThought}
-            onCommit={commitQuickThought}
-            textareaRef={quickThoughtRef}
-            currentNotesCount={currentNotesCount}
+        <aside className="right-pane" aria-label="Input">
+          <InputPane
+            noteValue={noteInput}
+            onNoteChange={setNoteInput}
+            onNoteCommit={commitNote}
+            noteTextareaRef={noteInputRef}
+            sourceValue={sourceInput}
+            sourceKind={sourceKind}
+            pdfFile={pdfFile}
+            pdfKind={pdfKind}
+            pdfInputRef={pdfInputRef}
+            onSourceChange={setSourceInput}
+            onSourceKindChange={setSourceKind}
+            onSourceCommit={commitSource}
+            onPdfChange={setPdfFile}
+            onPdfKindChange={setPdfKind}
+            onPdfUpload={uploadPdfSource}
+            notesCount={notesCount}
             hasCurrentNotes={hasCurrentNotes}
             onAi={askAi}
             onOpenCurrentNotes={openCurrentNotes}
@@ -480,19 +621,21 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
       ) : null}
 
       {viewMode !== "read" ? (
-        <button className="floating-thought" onClick={focusQuickThought}>
-          <Plus size={18} /> Thought
+        <button className="floating-notes" onClick={focusNotes}>
+          <Plus size={18} /> Notes
         </button>
       ) : null}
 
-      {captureStatus ? <div className="capture-toast">{captureStatus}</div> : null}
+      {captureStatus ? (
+        <div className="capture-toast">{captureStatus}</div>
+      ) : null}
 
-      {quickThoughtOpen ? (
-        <QuickThoughtModal
-          value={quickThought}
-          onChange={setQuickThought}
-          onClose={() => setQuickThoughtOpen(false)}
-          onCommit={commitQuickThought}
+      {notesCaptureOpen ? (
+        <NotesCaptureModal
+          value={noteInput}
+          onChange={setNoteInput}
+          onClose={() => setNotesCaptureOpen(false)}
+          onCommit={commitNote}
         />
       ) : null}
 
@@ -507,15 +650,16 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
             if (command === "write") setViewMode("write");
             if (command === "preview") setViewMode("preview");
             if (command === "focus") setFocusMode((value) => !value);
-            if (command === "quick-thought") focusQuickThought();
-            if (command === "current-notes") openCurrentNotes();
+            if (command === "focus-notes") focusNotes();
+            if (command === "open-notes") openCurrentNotes();
             if (command === "new-note") createNote("inbox");
-            if (command.startsWith("insert:")) insertSnippet(command.slice(7), setDraft, setSaveState);
+            if (command.startsWith("insert:"))
+              insertSnippet(command.slice(7), setDraft, setSaveState);
             if (command === "reindex") askAi("reindex-inbox");
             if (command === "links") askAi("suggest-links");
             if (command === "claims") askAi("extract-claims");
             if (command === "readme") loadFile("README.md");
-            if (command === "manuscript") loadFile("manuscript/main.md");
+            if (command === "manuscript") loadFile("main.md");
             if (command.startsWith("file:")) loadFile(command.slice(5));
           }}
         />
@@ -524,65 +668,149 @@ export function EssaiApp({ initialBooks }: { initialBooks: BookMetadata[] }) {
   );
 }
 
-function ThoughtCapturePane({
-  value,
-  onChange,
-  onCommit,
-  textareaRef,
-  currentNotesCount,
+function InputPane({
+  noteValue,
+  onNoteChange,
+  onNoteCommit,
+  noteTextareaRef,
+  sourceValue,
+  sourceKind,
+  pdfFile,
+  pdfKind,
+  pdfInputRef,
+  onSourceChange,
+  onSourceKindChange,
+  onSourceCommit,
+  onPdfChange,
+  onPdfKindChange,
+  onPdfUpload,
+  notesCount,
   hasCurrentNotes,
   onAi,
   onOpenCurrentNotes,
 }: {
-  value: string;
-  onChange: (value: string) => void;
-  onCommit: () => void;
-  textareaRef: RefObject<HTMLTextAreaElement | null>;
-  currentNotesCount: number;
+  noteValue: string;
+  onNoteChange: (value: string) => void;
+  onNoteCommit: () => void;
+  noteTextareaRef: RefObject<HTMLTextAreaElement | null>;
+  sourceValue: string;
+  sourceKind: SourceKind;
+  pdfFile: File | null;
+  pdfKind: SourceKind;
+  pdfInputRef: RefObject<HTMLInputElement | null>;
+  onSourceChange: (value: string) => void;
+  onSourceKindChange: (value: SourceKind) => void;
+  onSourceCommit: () => void;
+  onPdfChange: (value: File | null) => void;
+  onPdfKindChange: (value: SourceKind) => void;
+  onPdfUpload: () => void;
+  notesCount: number;
   hasCurrentNotes: boolean;
   onAi: (kind: string) => void;
   onOpenCurrentNotes: () => void;
 }) {
   return (
-    <div className="thought-pane">
-      <section className="current-notes-panel">
-        <h2>Current Notes</h2>
+    <div className="input-pane">
+      <section className="notes-panel">
+        <h2>Notes</h2>
         {hasCurrentNotes ? (
           <>
-            <p className="notes-count">{currentNotesCount}</p>
-            <p className="muted">Captured thoughts waiting safely.</p>
-            <button onClick={onOpenCurrentNotes}>Open Current Notes</button>
-            <button onClick={() => onAi("reindex-inbox")}>Process thoughts</button>
+            <p className="notes-count">{notesCount}</p>
+            <p className="muted">Notes waiting safely.</p>
+            <button onClick={onOpenCurrentNotes}>Open Notes</button>
+            <button onClick={() => onAi("reindex-inbox")}>
+              Organize later
+            </button>
           </>
         ) : (
           <>
-            <p className="muted">No current notes file yet.</p>
-            <button onClick={onOpenCurrentNotes}>Create Current Notes</button>
+            <p className="muted">No notes file yet.</p>
+            <button onClick={onOpenCurrentNotes}>Create Notes</button>
           </>
         )}
       </section>
-      <section className="persistent-thought-box">
-        <p className="eyebrow">Thought</p>
+      <section className="notes-capture-box">
+        <p className="eyebrow">Notes</p>
         <textarea
-          ref={textareaRef}
+          ref={noteTextareaRef}
           autoFocus
-          aria-label="Thought input"
-          placeholder="Catch it here. Submit, clear, keep moving."
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
+          aria-label="Notes input"
+          placeholder="Write a note. Submit, clear, keep moving."
+          value={noteValue}
+          onChange={(event) => onNoteChange(event.target.value)}
           onKeyDown={(event) => {
             if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
               event.preventDefault();
-              onCommit();
+              onNoteCommit();
             }
           }}
         />
-        <button onClick={onCommit}>Submit</button>
-        <p className="muted">Saved to inbox/current-notes.md</p>
+        <button onClick={onNoteCommit}>Submit Note</button>
+        <p className="muted">Saved to notes.md</p>
+      </section>
+      <section className="source-capture-box">
+        <p className="eyebrow">Sources</p>
+        <textarea
+          aria-label="Sources input"
+          placeholder="Paste a link, citation, quote, or raw source."
+          value={sourceValue}
+          onChange={(event) => onSourceChange(event.target.value)}
+        />
+        <div className="source-actions">
+          <select
+            aria-label="Source type"
+            value={sourceKind}
+            onChange={(event) =>
+              onSourceKindChange(event.target.value as SourceKind)
+            }
+          >
+            <option value="raw">raw</option>
+            <option value="book">book</option>
+            <option value="paper">paper</option>
+            <option value="article">article</option>
+            <option value="quote">quote</option>
+            <option value="claim">claim</option>
+          </select>
+          <button onClick={onSourceCommit}>Commit Source</button>
+        </div>
+        <p className="muted">Saved to sources/raw.md and mirrored by type.</p>
+      </section>
+      <section className="pdf-source-box">
+        <p className="eyebrow">PDF source</p>
+        <input
+          ref={pdfInputRef}
+          aria-label="PDF source file"
+          type="file"
+          accept="application/pdf,.pdf"
+          onChange={(event) => onPdfChange(event.target.files?.[0] ?? null)}
+        />
+        <div className="source-actions">
+          <select
+            aria-label="PDF source type"
+            value={pdfKind}
+            onChange={(event) =>
+              onPdfKindChange(event.target.value as SourceKind)
+            }
+          >
+            <option value="book">book</option>
+            <option value="paper">paper</option>
+            <option value="article">article</option>
+            <option value="quote">quote</option>
+            <option value="claim">claim</option>
+            <option value="raw">raw</option>
+          </select>
+          <button onClick={onPdfUpload} disabled={!pdfFile}>
+            Upload PDF
+          </button>
+        </div>
+        {pdfFile ? <p className="muted">{pdfFile.name}</p> : null}
+        <p className="muted">
+          Stored under sources/files and indexed in Markdown.
+        </p>
       </section>
       <section className="quiet-process">
         <h2>Later</h2>
-        <button onClick={() => onAi("reindex-inbox")}>Process thoughts</button>
+        <button onClick={() => onAi("reindex-inbox")}>Organize notes</button>
       </section>
     </div>
   );
@@ -603,8 +831,8 @@ function CommandPalette({
     ["preview", "Preview mode"],
     ["read", "Read mode"],
     ["save", "Save"],
-    ["quick-thought", "Quick Thought"],
-    ["current-notes", "Open Current Notes"],
+    ["focus-notes", "Focus Notes"],
+    ["open-notes", "Open Notes"],
     ["focus", "Toggle focus mode"],
     ["new-note", "New note"],
     ["reindex", "Reindex inbox"],
@@ -617,13 +845,23 @@ function CommandPalette({
     ["insert:question", "/question"],
     ["readme", "Open README"],
     ["manuscript", "Open manuscript"],
-    ...files.map((file) => [`file:${file.path.replace(/^data\/books\/[^/]+\//, "")}`, file.path.replace(/^data\/books\/[^/]+\//, "")]),
+    ...files.map((file) => [
+      `file:${cleanProjectPath(file.path)}`,
+      cleanProjectPath(file.path),
+    ]),
   ];
-  const filtered = commands.filter(([, label]) => label.toLowerCase().includes(query.toLowerCase())).slice(0, 12);
+  const filtered = commands
+    .filter(([, label]) => label.toLowerCase().includes(query.toLowerCase()))
+    .slice(0, 12);
   return (
     <div className="palette-backdrop" onClick={onClose}>
       <div className="palette" onClick={(event) => event.stopPropagation()}>
-        <input autoFocus placeholder="Command or file" value={query} onChange={(event) => setQuery(event.target.value)} />
+        <input
+          autoFocus
+          placeholder="Command or file"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
         <div>
           {filtered.map(([command, label]) => (
             <button key={command} onClick={() => onCommand(command)}>
@@ -636,7 +874,7 @@ function CommandPalette({
   );
 }
 
-function QuickThoughtModal({
+function NotesCaptureModal({
   value,
   onChange,
   onClose,
@@ -648,34 +886,44 @@ function QuickThoughtModal({
   onCommit: () => void;
 }) {
   return (
-    <div className="thought-backdrop" onClick={onClose}>
-      <section className="thought-sheet" onClick={(event) => event.stopPropagation()}>
-        <p className="eyebrow">Quick Thought</p>
+    <div className="notes-backdrop" onClick={onClose}>
+      <section
+        className="notes-sheet"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <p className="eyebrow">Notes</p>
         <textarea
           autoFocus
-          aria-label="Quick thought"
-          placeholder="Write the thought before it disappears."
+          aria-label="Quick note"
+          placeholder="Write the note before it disappears."
           value={value}
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Escape") onClose();
-            if (event.key === "Enter" && (!event.shiftKey || event.metaKey || event.ctrlKey)) {
+            if (
+              event.key === "Enter" &&
+              (!event.shiftKey || event.metaKey || event.ctrlKey)
+            ) {
               event.preventDefault();
               onCommit();
             }
           }}
         />
-        <div className="thought-actions">
+        <div className="notes-actions">
           <span>Enter captures. Shift+Enter makes a line.</span>
-          <button onClick={onCommit}>Capture</button>
+          <button onClick={onCommit}>Submit Note</button>
         </div>
       </section>
     </div>
   );
 }
 
-function renderNode(node: FileNode, bookId: string, loadFile: (path: string) => void) {
-  const cleanPath = node.path.replace(`data/books/${bookId}/`, "");
+function renderNode(
+  node: FileNode,
+  bookId: string,
+  loadFile: (path: string) => void,
+) {
+  const cleanPath = cleanProjectPath(node.path, bookId);
   if (node.kind === "directory") {
     return (
       <details key={node.path} open>
@@ -687,18 +935,32 @@ function renderNode(node: FileNode, bookId: string, loadFile: (path: string) => 
     );
   }
   return (
-    <button key={node.path} className="file-row" onClick={() => loadFile(cleanPath)}>
+    <button
+      key={node.path}
+      className="file-row"
+      onClick={() => loadFile(cleanPath)}
+    >
       {node.name}
     </button>
   );
 }
 
 function flattenNodes(nodes: FileNode[]): FileNode[] {
-  return nodes.flatMap((node) => [node, ...(node.children ? flattenNodes(node.children) : [])]);
+  return nodes.flatMap((node) => [
+    node,
+    ...(node.children ? flattenNodes(node.children) : []),
+  ]);
 }
 
 function encodeURIComponentPath(path: string) {
   return path.split("/").map(encodeURIComponent).join("/");
+}
+
+function cleanProjectPath(path: string, bookId?: string) {
+  const scoped = bookId
+    ? new RegExp(`^projects/${bookId}/`)
+    : /^projects\/[^/]+\//;
+  return path.replace(scoped, "");
 }
 
 function insertSnippet(

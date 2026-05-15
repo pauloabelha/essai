@@ -19,7 +19,10 @@ export function slugifyBookId(title: string) {
   );
 }
 
-export function createBookMetadata(title: string, language = "pt-BR"): BookMetadata {
+export function createBookMetadata(
+  title: string,
+  language = "pt-BR",
+): BookMetadata {
   const now = new Date().toISOString();
   return {
     id: slugifyBookId(title),
@@ -44,32 +47,28 @@ A self-contained Markdown vault for developing this book.
 The manuscript is written only by the human author. AI may organize notes and suggest structure, but cannot silently rewrite manuscript prose.
 
 ## Folder structure
-- manuscript/ contains canonical draft material.
-- inbox/current-notes.md receives quick, unprocessed thoughts before classification.
-- inbox/ may also contain older or specialized inbox files.
+- main.md contains the book manuscript.
+- notes.md receives quick, unprocessed notes before classification.
 - concepts/ defines ideas that recur across the work.
 - objects/ gathers historical, technical, or material examples.
-- essays/ holds exploratory prose outside the sacred manuscript.
-- formulations/ keeps compressed sentences and working definitions.
 - sources/ grounds claims in books, papers, quotations, and evidence.
+- sources/files/ stores uploaded PDFs by source type.
+- drafts/ holds exploratory prose outside the canonical manuscript.
+- fragments/ keeps compressed sentences and loose formulations.
 
 ## Workflow
-- Draft in manuscript/
-- Capture fragments into inbox/current-notes.md
+- Draft in main.md
+- Capture fragments into notes.md
 - Refine concepts/
 - Ground claims in sources/
 - Use AI only for organization
 `,
-    "manuscript/main.md": `# ${title}
+    "main.md": "",
+    "main.suggestions.md": `# Suggested manuscript diffs
 
-_Every word in this manuscript is written by the human author._
-
+AI suggestions for manuscript files belong here as reviewable proposals only. Never paste text into main.md unless the human author accepts it manually.
 `,
-    "manuscript/main.suggestions.md": `# Suggested manuscript diffs
-
-AI suggestions for manuscript files belong here as reviewable proposals only. Never paste text into manuscript/main.md unless the human author accepts it manually.
-`,
-    "inbox/current-notes.md": `# Current Notes
+    "notes.md": `# Notes
 
 Fast captures live here until the author decides where they belong.
 `,
@@ -102,11 +101,11 @@ An object note for patterned instruction.
 
 An object note for ancient calculation and mechanism.
 `,
-    "essays/music-cylinder-essay-v1.md": `# Music cylinder essay v1
+    "drafts/music-cylinder-essay-v1.md": `# Music cylinder essay v1
 
 An exploratory essay outside the canonical manuscript.
 `,
-    "formulations/compression-sentences.md": `# Compression sentences
+    "fragments/compression-sentences.md": `# Compression sentences
 
 - Store candidate formulations here.
 `,
@@ -116,12 +115,31 @@ An exploratory essay outside the canonical manuscript.
     "sources/Papers.md": `# Papers
 
 `,
+    "sources/Articles.md": `# Articles
+
+`,
     "sources/Quotes.md": `# Quotes
 
 `,
     "sources/Claims.md": `# Claims
 
 - [ ] Claims that need evidence.
+`,
+    "sources/raw.md": `# Raw Sources
+
+`,
+    "sources/files/README.md": `# Source Files
+
+Uploaded PDFs are stored here by type:
+
+- book/
+- paper/
+- article/
+- quote/
+- claim/
+- raw/
+
+The Markdown files in sources/ remain the readable index.
 `,
   };
 }

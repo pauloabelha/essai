@@ -16,7 +16,9 @@ export async function GET(
   const query = url.searchParams.get("q");
   const storage = getServerStorage();
   if (query) {
-    return NextResponse.json(searchDocuments(await readAllMarkdownFiles(storage, bookId), query));
+    return NextResponse.json(
+      searchDocuments(await readAllMarkdownFiles(storage, bookId), query),
+    );
   }
   return NextResponse.json(await listBookFiles(storage, bookId));
 }
@@ -27,7 +29,13 @@ export async function POST(
 ) {
   const { bookId } = await context.params;
   const body = (await request.json()) as { path?: string; content?: string };
-  if (!body.path) return NextResponse.json({ error: "Path is required" }, { status: 400 });
-  await createBookFile(getServerStorage(), bookId, body.path, body.content ?? `# ${body.path}\n`);
+  if (!body.path)
+    return NextResponse.json({ error: "Path is required" }, { status: 400 });
+  await createBookFile(
+    getServerStorage(),
+    bookId,
+    body.path,
+    body.content ?? `# ${body.path}\n`,
+  );
   return NextResponse.json({ ok: true }, { status: 201 });
 }

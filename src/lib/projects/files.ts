@@ -1,4 +1,5 @@
 import { bookFilePath, bookRoot } from "@/lib/projects/service";
+import { touchBook } from "@/lib/projects/service";
 import type { StorageProvider } from "@/lib/storage/types";
 import { flattenFiles } from "@/lib/markdown/wiki";
 
@@ -7,7 +8,11 @@ export async function listBookFiles(storage: StorageProvider, bookId: string) {
   return nodes;
 }
 
-export async function readBookFile(storage: StorageProvider, bookId: string, path: string) {
+export async function readBookFile(
+  storage: StorageProvider,
+  bookId: string,
+  path: string,
+) {
   return storage.readFile(bookFilePath(bookId, path));
 }
 
@@ -17,7 +22,21 @@ export async function writeBookFile(
   path: string,
   content: string,
 ) {
-  return storage.writeFile(bookFilePath(bookId, path), content);
+  await storage.writeFile(bookFilePath(bookId, path), content);
+  await touchBook(storage, bookId);
+}
+
+export async function writeBinaryBookFile(
+  storage: StorageProvider,
+  bookId: string,
+  path: string,
+  content: Uint8Array,
+) {
+  if (!storage.writeBinaryFile) {
+    throw new Error("This storage provider does not support binary files.");
+  }
+  await storage.writeBinaryFile(bookFilePath(bookId, path), content);
+  await touchBook(storage, bookId);
 }
 
 export async function createBookFile(
@@ -26,11 +45,17 @@ export async function createBookFile(
   path: string,
   content = "",
 ) {
-  return storage.createFile(bookFilePath(bookId, path), content);
+  await storage.createFile(bookFilePath(bookId, path), content);
+  await touchBook(storage, bookId);
 }
 
-export async function deleteBookFile(storage: StorageProvider, bookId: string, path: string) {
-  return storage.deleteFile(bookFilePath(bookId, path));
+export async function deleteBookFile(
+  storage: StorageProvider,
+  bookId: string,
+  path: string,
+) {
+  await storage.deleteFile(bookFilePath(bookId, path));
+  await touchBook(storage, bookId);
 }
 
 export async function renameBookFile(
@@ -39,10 +64,17 @@ export async function renameBookFile(
   oldPath: string,
   newPath: string,
 ) {
-  return storage.renameFile(bookFilePath(bookId, oldPath), bookFilePath(bookId, newPath));
+  await storage.renameFile(
+    bookFilePath(bookId, oldPath),
+    bookFilePath(bookId, newPath),
+  );
+  await touchBook(storage, bookId);
 }
 
-export async function readAllMarkdownFiles(storage: StorageProvider, bookId: string) {
+export async function readAllMarkdownFiles(
+  storage: StorageProvider,
+  bookId: string,
+) {
   const nodes = await listBookFiles(storage, bookId);
   const files = flattenFiles(nodes)
     .filter((node) => node.kind === "file" && node.path.endsWith(".md"))

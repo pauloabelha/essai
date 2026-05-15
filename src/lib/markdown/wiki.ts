@@ -42,7 +42,9 @@ export function slugFromPath(path: string) {
 export function resolveWikiTarget(target: string, files: string[]) {
   const normalized = target.toLowerCase().replace(/\.mdx?$/i, "");
   return (
-    files.find((file) => file.toLowerCase().replace(/\.mdx?$/i, "") === normalized) ??
+    files.find(
+      (file) => file.toLowerCase().replace(/\.mdx?$/i, "") === normalized,
+    ) ??
     files.find((file) => slugFromPath(file) === normalized) ??
     null
   );
@@ -53,9 +55,13 @@ export function analyzeLinks(
   currentMarkdown: string,
   allFiles: Array<{ path: string; content: string }>,
 ): LinkAnalysis {
-  const markdownFiles = allFiles.map((file) => file.path).filter((file) => file.endsWith(".md"));
+  const markdownFiles = allFiles
+    .map((file) => file.path)
+    .filter((file) => file.endsWith(".md"));
   const outgoing = parseWikiLinks(currentMarkdown);
-  const broken = outgoing.filter((link) => !resolveWikiTarget(link.target, markdownFiles));
+  const broken = outgoing.filter(
+    (link) => !resolveWikiTarget(link.target, markdownFiles),
+  );
   const backlinks = allFiles
     .filter((file) => file.path !== currentPath && file.path.endsWith(".md"))
     .map((file) => ({

@@ -9,6 +9,7 @@ export const slashSnippets: Record<string, string> = {
 export function expandSlashCommand(value: string) {
   return value.replace(
     /(^|\n)\/(claim|source|concept|object|question)(\s*)$/i,
-    (_match, prefix: string, command: string) => `${prefix}${slashSnippets[command.toLowerCase()] ?? ""}`,
+    (_match, prefix: string, command: string) =>
+      `${prefix}${slashSnippets[command.toLowerCase()] ?? ""}`,
   );
 }

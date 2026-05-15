@@ -14,10 +14,7 @@ export function searchDocuments(
   query: string,
   folder?: string,
 ): SearchResult[] {
-  const terms = query
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean);
+  const terms = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (!terms.length) return [];
 
   return documents

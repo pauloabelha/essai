@@ -20,7 +20,8 @@ const mono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: "Essai",
-  description: "A calm Markdown writing environment for long-form intellectual work.",
+  description:
+    "A calm Markdown writing environment for long-form intellectual work.",
 };
 
 export default function RootLayout({

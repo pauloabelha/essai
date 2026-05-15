@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { appendQuickThought, countThoughtBlocks } from "@/lib/projects/current-notes";
+import { appendNote, countNoteBlocks } from "@/lib/projects/notes";
 import { createBook, listBooks } from "@/lib/projects/service";
+import {
+  appendPdfSource,
+  appendSource,
+  parseSourceKind,
+} from "@/lib/projects/sources";
 import { InMemoryStorageProvider } from "@/lib/storage/in-memory";
 
 describe("project creation", () => {
@@ -8,35 +13,54 @@ describe("project creation", () => {
     const storage = new InMemoryStorageProvider();
     const book = await createBook(storage, "My Book");
     expect(book.id).toBe("my-book");
-    expect(await storage.readFile("data/books/my-book/manuscript/main.md")).toContain(
-      "Every word in this manuscript",
-    );
-    expect(await storage.readFile("data/books/my-book/inbox/current-notes.md")).toContain(
-      "Current Notes",
+    expect(await storage.readFile("projects/my-book/main.md")).toBe("");
+    expect(await storage.readFile("projects/my-book/notes.md")).toContain(
+      "Notes",
     );
     expect(await listBooks(storage)).toHaveLength(1);
   });
 
-  it("creates current-notes.md when appending a quick thought", async () => {
+  it("lists the most recently edited project first", async () => {
     const storage = new InMemoryStorageProvider();
-    await createBook(storage, "My Book");
-    await storage.deleteFile("data/books/my-book/inbox/current-notes.md");
-    const result = await appendQuickThought(
-      storage,
-      "my-book",
-      "A thought for later.",
-      new Date("2026-05-14T21:30:00Z"),
+    await createBook(storage, "First");
+    await createBook(storage, "Second");
+    const first = JSON.parse(
+      await storage.readFile("projects/first/book.json"),
     );
-    expect(result.path).toBe("inbox/current-notes.md");
-    expect(await storage.readFile("data/books/my-book/inbox/current-notes.md")).toContain(
-      "A thought for later.",
+    const second = JSON.parse(
+      await storage.readFile("projects/second/book.json"),
     );
-    expect(countThoughtBlocks(result.content)).toBe(1);
+    await storage.writeFile(
+      "projects/first/book.json",
+      JSON.stringify({ ...first, updatedAt: "2026-05-14T22:00:00.000Z" }),
+    );
+    await storage.writeFile(
+      "projects/second/book.json",
+      JSON.stringify({ ...second, updatedAt: "2026-05-14T21:00:00.000Z" }),
+    );
+    expect((await listBooks(storage))[0].id).toBe("first");
   });
 
-  it("preserves older random-thoughts.md files", async () => {
+  it("creates notes.md when appending a note", async () => {
+    const storage = new InMemoryStorageProvider();
+    await createBook(storage, "My Book");
+    await storage.deleteFile("projects/my-book/notes.md");
+    const result = await appendNote(
+      storage,
+      "my-book",
+      "A note for later.",
+      new Date("2026-05-14T21:30:00Z"),
+    );
+    expect(result.path).toBe("notes.md");
+    expect(await storage.readFile("projects/my-book/notes.md")).toContain(
+      "A note for later.",
+    );
+    expect(countNoteBlocks(result.content)).toBe(1);
+  });
+
+  it("preserves older inbox files while writing notes.md", async () => {
     const storage = new InMemoryStorageProvider({
-      "data/books/old-book/book.json": JSON.stringify({
+      "projects/old-book/book.json": JSON.stringify({
         id: "old-book",
         title: "Old Book",
         subtitle: "",
@@ -44,14 +68,90 @@ describe("project creation", () => {
         createdAt: "",
         updatedAt: "",
       }),
-      "data/books/old-book/inbox/random-thoughts.md": "# Random thoughts\n\nKeep me.\n",
+      "projects/old-book/inbox/random-thoughts.md":
+        "# Random thoughts\n\nKeep me.\n",
     });
-    await appendQuickThought(storage, "old-book", "New capture.");
-    expect(await storage.readFile("data/books/old-book/inbox/random-thoughts.md")).toContain(
-      "Keep me.",
-    );
-    expect(await storage.readFile("data/books/old-book/inbox/current-notes.md")).toContain(
+    await appendNote(storage, "old-book", "New capture.");
+    expect(
+      await storage.readFile("projects/old-book/inbox/random-thoughts.md"),
+    ).toContain("Keep me.");
+    expect(await storage.readFile("projects/old-book/notes.md")).toContain(
       "New capture.",
     );
+  });
+
+  it("appends sources to raw and mirrors typed sources", async () => {
+    const storage = new InMemoryStorageProvider();
+    await createBook(storage, "My Book");
+    await appendSource(
+      storage,
+      "my-book",
+      "https://example.com/paper",
+      "paper",
+      new Date("2026-05-14T21:30:00Z"),
+    );
+    expect(await storage.readFile("projects/my-book/sources/raw.md")).toContain(
+      "https://example.com/paper",
+    );
+    expect(
+      await storage.readFile("projects/my-book/sources/Papers.md"),
+    ).toContain("Type: paper");
+  });
+
+  it("stores uploaded PDFs in typed source folders and indexes them", async () => {
+    const storage = new InMemoryStorageProvider();
+    await createBook(storage, "My Book");
+    const result = await appendPdfSource(
+      storage,
+      "my-book",
+      {
+        name: "Important Paper.pdf",
+        bytes: new Uint8Array([37, 80, 68, 70]),
+      },
+      "paper",
+      new Date("2026-05-14T21:30:00Z"),
+    );
+
+    expect(result.filePath).toBe(
+      "sources/files/paper/20260514-213000-Important-Paper.pdf",
+    );
+    expect(
+      await storage.readBinaryFile?.(
+        "projects/my-book/sources/files/paper/20260514-213000-Important-Paper.pdf",
+      ),
+    ).toEqual(new Uint8Array([37, 80, 68, 70]));
+    expect(await storage.readFile("projects/my-book/sources/raw.md")).toContain(
+      "[Important Paper.pdf](files/paper/20260514-213000-Important-Paper.pdf)",
+    );
+    expect(
+      await storage.readFile("projects/my-book/sources/Papers.md"),
+    ).toContain("Uploaded PDF source.");
+  });
+
+  it("rejects empty PDF uploads before indexing them", async () => {
+    const storage = new InMemoryStorageProvider();
+    await createBook(storage, "My Book");
+
+    await expect(
+      appendPdfSource(
+        storage,
+        "my-book",
+        {
+          name: "empty.pdf",
+          bytes: new Uint8Array(),
+        },
+        "paper",
+      ),
+    ).rejects.toThrow("PDF is empty");
+
+    expect(
+      await storage.readFile("projects/my-book/sources/raw.md"),
+    ).not.toContain("empty.pdf");
+  });
+
+  it("falls back to raw for unknown source kinds", () => {
+    expect(parseSourceKind("book")).toBe("book");
+    expect(parseSourceKind("archive")).toBe("raw");
+    expect(parseSourceKind(null)).toBe("raw");
   });
 });

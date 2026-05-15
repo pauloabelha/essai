@@ -5,7 +5,10 @@ describe("search index", () => {
   it("matches filenames and full text with snippets", () => {
     const results = searchDocuments(
       [
-        { path: "objects/music-cylinder.md", content: "Mechanical memory repeats a performance." },
+        {
+          path: "objects/music-cylinder.md",
+          content: "Mechanical memory repeats a performance.",
+        },
         { path: "sources/Books.md", content: "Bibliography." },
       ],
       "memory",

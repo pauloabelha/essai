@@ -97,8 +97,14 @@ function renderBasicMarkdown(markdown: string) {
       closeList();
       closeQuote();
       const level = heading[1].length;
-      const id = heading[2].toLowerCase().replace(/[^a-z0-9\s-]/g, "").trim().replace(/\s+/g, "-");
-      output.push(`<h${level} id="${id}">${inlineMarkdown(escapeHtml(heading[2]))}</h${level}>`);
+      const id = heading[2]
+        .toLowerCase()
+        .replace(/[^a-z0-9\s-]/g, "")
+        .trim()
+        .replace(/\s+/g, "-");
+      output.push(
+        `<h${level} id="${id}">${inlineMarkdown(escapeHtml(heading[2]))}</h${level}>`,
+      );
       continue;
     }
     if (/^>\s?/.test(line)) {
@@ -107,7 +113,9 @@ function renderBasicMarkdown(markdown: string) {
         output.push("<blockquote>");
         inQuote = true;
       }
-      output.push(`<p>${inlineMarkdown(escapeHtml(line.replace(/^>\s?/, "")))}</p>`);
+      output.push(
+        `<p>${inlineMarkdown(escapeHtml(line.replace(/^>\s?/, "")))}</p>`,
+      );
       continue;
     }
     if (/^[-*]\s+/.test(line)) {
@@ -116,7 +124,9 @@ function renderBasicMarkdown(markdown: string) {
         output.push("<ul>");
         inList = true;
       }
-      output.push(`<li>${inlineMarkdown(escapeHtml(line.replace(/^[-*]\s+/, "")))}</li>`);
+      output.push(
+        `<li>${inlineMarkdown(escapeHtml(line.replace(/^[-*]\s+/, "")))}</li>`,
+      );
       continue;
     }
     if (!line.trim()) {

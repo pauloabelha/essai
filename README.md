@@ -8,7 +8,7 @@ It is built for books, essays, research notes, claims, objects, concepts, and fo
 
 Essai is not an AI writing app. It is a human writing environment.
 
-The canonical manuscript is sacred. Every word in `manuscript/` is written by the human author. AI may organize, classify, summarize, suggest links, detect contradictions, extract claims, and propose diffs in auxiliary files. AI may not silently rewrite manuscript prose, generate chapters, overwrite author text, or “improve style” automatically.
+The canonical manuscript is sacred. Every word in `main.md` is written by the human author. AI may organize, classify, summarize, suggest links, detect contradictions, extract claims, and propose diffs in auxiliary files. AI may not silently rewrite manuscript prose, generate chapters, overwrite author text, or “improve style” automatically.
 
 The aim is restraint: readable typography, durable files, fast navigation, and an interface that feels closer to an editorial room than a productivity dashboard.
 
@@ -24,16 +24,16 @@ The three modes are:
 
 Focus mode hides both sidebars when the page needs to become only the text.
 
-## Quick Thought Capture
+## Notes And Sources Capture
 
-The right pane is reserved for capture. It contains a persistent **Thought** box, focused by default, so a fragment can be written immediately without opening a modal. Press **Submit** to append the thought, clear the box, and keep writing the next one. `Cmd/Ctrl+Shift+N` returns focus to the Thought box.
+The right pane is reserved for input. It contains a persistent **Notes** box, focused by default, so a fragment can be written immediately. Press **Submit Note** to append the note, clear the box, and keep writing the next one. `Cmd/Ctrl+Shift+N` returns focus to the Notes box.
 
-On narrow screens or when focus mode hides the sidebars, the floating Thought button opens the same capture flow.
+On narrow screens or when focus mode hides the sidebars, the floating Notes button opens the same capture flow.
 
-Quick thoughts append to:
+Notes append to:
 
 ```txt
-inbox/current-notes.md
+notes.md
 ```
 
 If the file does not exist, Essai creates it. Each capture is appended as:
@@ -41,12 +41,50 @@ If the file does not exist, Essai creates it. Each capture is appended as:
 ```md
 ## YYYY-MM-DD HH:mm
 
-<thought>
+<note>
 
 ---
 ```
 
-Older projects may still contain `inbox/random-thoughts.md`. Essai keeps those files readable and does not delete them. New projects prefer `current-notes.md`.
+Older projects may still contain legacy inbox files. Essai keeps those files readable and does not delete them. New projects prefer `notes.md`.
+
+The right pane also contains a **Sources** box for links, citations, quotes, and raw references. Every source capture is appended to:
+
+```txt
+sources/raw.md
+```
+
+When a type is selected, Essai also mirrors the entry into the appropriate file:
+
+- `book` -> `sources/Books.md`
+- `paper` -> `sources/Papers.md`
+- `article` -> `sources/Articles.md`
+- `quote` -> `sources/Quotes.md`
+- `claim` -> `sources/Claims.md`
+
+PDFs can be uploaded from the same right pane. Choose the source type before uploading. Essai stores the PDF inside the project under:
+
+```txt
+sources/files/<type>/
+```
+
+It then indexes the upload in `sources/raw.md` and mirrors the entry into the selected typed source file. The Markdown index stays readable, and the PDF remains in a portable subfolder beside the manuscript.
+
+PDF uploads follow the same authorship rule as everything else in Essai: the PDF is archived and indexed, but its contents are not rewritten into the manuscript. A PDF source entry looks like:
+
+```md
+## 2026-05-15 14:30
+
+Type: paper
+
+File: [Important Paper.pdf](files/paper/20260515-143000-Important-Paper.pdf)
+
+Uploaded PDF source.
+
+---
+```
+
+The stored filename is timestamped and sanitized so source folders stay git-friendly. Unknown source types fall back to `raw`, and empty PDFs are rejected before any Markdown index is changed.
 
 ## Architecture
 
@@ -56,6 +94,7 @@ Older projects may still contain `inbox/random-thoughts.md`. Essai keeps those f
 - CodeMirror 6 for Markdown editing.
 - Markdown files as the primary data model.
 - A storage abstraction in `src/lib/storage`.
+- Binary storage methods for uploaded source files.
 - Wiki-link, backlink, broken-link, and search logic in `src/lib`.
 - Vitest unit tests and Playwright end-to-end tests.
 
@@ -65,7 +104,9 @@ The storage contract is:
 interface StorageProvider {
   listFiles(): Promise<FileNode[]>;
   readFile(path: string): Promise<string>;
+  readBinaryFile?(path: string): Promise<Uint8Array>;
   writeFile(path: string, content: string): Promise<void>;
+  writeBinaryFile?(path: string, content: Uint8Array): Promise<void>;
   createFile(path: string, content?: string): Promise<void>;
   deleteFile(path: string): Promise<void>;
   renameFile(oldPath: string, newPath: string): Promise<void>;
@@ -87,20 +128,36 @@ Documented stubs:
 Books live under:
 
 ```txt
-data/
-  books/
-    my-book/
-      book.json
-      README.md
-      manuscript/
-      inbox/
-        current-notes.md
-      concepts/
-      objects/
-      essays/
-      formulations/
-      sources/
+projects/
+  my-book/
+    book.json
+    README.md
+    main.md
+    notes.md
+    main.suggestions.md
+    concepts/
+    objects/
+    sources/
+      raw.md
+      Books.md
+      Papers.md
+      Articles.md
+      Quotes.md
+      Claims.md
+      files/
+        paper/
+        book/
+    drafts/
+    fragments/
 ```
+
+The app route mirrors the folder:
+
+```txt
+/projects/my-book
+```
+
+Opening `/` redirects to the most recently edited project.
 
 Each book directory is independently portable. You can zip it, commit it to git, move it to another machine, or read it in any Markdown editor.
 
@@ -111,6 +168,27 @@ ESSAI_DATA_ROOT=/path/to/storage npm run dev
 ```
 
 Production deployments should not rely on Vercel filesystem persistence. Use the storage interface to add a durable provider such as GitHub, Blob, or S3-backed storage.
+
+## Source Intake Contract
+
+Text sources and PDF sources are deliberately handled as archive operations:
+
+- `sources/raw.md` is the chronological ledger of every source capture.
+- Typed files such as `sources/Papers.md` and `sources/Books.md` are filtered indexes.
+- Uploaded PDFs live under `sources/files/<type>/`.
+- Markdown indexes link to PDFs with relative links, so the project folder remains portable.
+- AI may later classify or summarize sources, but it must not alter `main.md` without an explicit human action.
+
+The current source types are:
+
+```txt
+raw
+book
+paper
+article
+quote
+claim
+```
 
 ## Setup
 
@@ -133,13 +211,25 @@ npm run test:e2e  # Playwright tests
 npm run format    # Prettier
 ```
 
+The test suite covers:
+
+- project creation and latest-project ordering
+- note capture into `notes.md`
+- preservation of legacy inbox files
+- text source indexing and typed mirroring
+- PDF source storage, sanitization, and Markdown indexing
+- binary storage list/read/rename/delete behavior
+- write/preview/read mode switching
+- focus mode
+- end-to-end note, text source, and PDF source capture
+
 ## Keyboard Shortcuts
 
 - `Cmd/Ctrl+S`: save
 - `Cmd/Ctrl+K`: command palette
 - `Cmd/Ctrl+P`: quick open
 - `Cmd/Ctrl+R`: reading mode
-- `Cmd/Ctrl+Shift+N`: quick thought
+- `Cmd/Ctrl+Shift+N`: focus notes input
 - `Cmd/Ctrl+.`: focus mode
 - `Cmd/Ctrl+B`: bold selected text
 - `Cmd/Ctrl+I`: italic selected text
