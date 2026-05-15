@@ -9,18 +9,30 @@
   --rule: #ddd3c5;
   --accent: #6f1d1b;
   --accent-ink: #fff9f1;
+  --editor-bg: #fcfaf6;
+  --editor-ink: #1f1b16;
+  --editor-muted: #756d62;
+  --editor-caret: #6f1d1b;
+  --editor-selection: rgb(111 29 27 / 0.16);
+  --editor-line: transparent;
   --shadow: 0 18px 55px rgb(58 43 27 / 0.12);
 }
 
 .dark {
-  --paper: #11100e;
-  --surface: #171512;
-  --surface-2: #242019;
-  --ink: #eee7dc;
-  --muted: #aaa093;
-  --rule: #332d25;
-  --accent: #d3b16c;
+  --paper: #0d0c0a;
+  --surface: #12110f;
+  --surface-2: #1f1c17;
+  --ink: #f0e8db;
+  --muted: #a89f91;
+  --rule: #342f27;
+  --accent: #d8b56f;
   --accent-ink: #19140c;
+  --editor-bg: #0f0e0c;
+  --editor-ink: #f3eadc;
+  --editor-muted: #aa9f90;
+  --editor-caret: #e5c27a;
+  --editor-selection: rgb(216 181 111 / 0.24);
+  --editor-line: rgb(255 246 231 / 0.025);
   --shadow: 0 18px 55px rgb(0 0 0 / 0.35);
 }
 
@@ -66,7 +78,7 @@ button {
 }
 
 .app-frame.study-active {
-  grid-template-columns: 268px minmax(0, 1fr);
+  grid-template-columns: 268px minmax(0, 1fr) 258px;
 }
 
 .left-pane,
@@ -200,6 +212,107 @@ button:focus-visible {
   border-bottom: 1px solid var(--rule);
   padding: 12px 0;
   margin-bottom: 12px;
+}
+
+.section-tree {
+  display: grid;
+  gap: 6px;
+  margin-top: 24px;
+  border-top: 1px solid var(--rule);
+  padding-top: 16px;
+}
+
+.section-tree-heading {
+  margin-bottom: 4px;
+}
+
+.section-tree-node {
+  display: grid;
+  gap: 5px;
+}
+
+.section-row {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  border-color: transparent;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  padding: 5px 6px 5px calc(8px + var(--section-depth, 0) * 16px);
+  text-align: left;
+}
+
+.section-row:hover,
+.section-row.active {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--rule));
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.section-row.dragging {
+  opacity: 0.48;
+}
+
+.section-open-button {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  justify-content: flex-start;
+  padding: 4px 0;
+  text-align: left;
+}
+
+.section-open-button:hover {
+  background: transparent;
+}
+
+.section-open-button span {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+  font-size: 15px;
+}
+
+.section-rename-button {
+  width: 28px;
+  min-height: 28px;
+  justify-content: center;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+  opacity: 0;
+}
+
+.section-row:hover .section-rename-button,
+.section-rename-button:focus-visible {
+  opacity: 1;
+}
+
+.section-rename-form {
+  grid-column: 1 / -1;
+}
+
+.section-rename-form input {
+  width: 100%;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--rule));
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 7px 8px;
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-size: 15px;
+  outline: none;
+}
+
+.section-tree-children {
+  display: grid;
+  gap: 5px;
 }
 
 .notes-link {
@@ -441,21 +554,6 @@ summary {
   gap: 14px;
 }
 
-.notes-panel {
-  background: color-mix(in srgb, var(--accent) 5%, transparent);
-  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--rule));
-  border-radius: 7px;
-  padding: 12px !important;
-}
-
-.notes-count {
-  margin: 0;
-  font-family: var(--font-serif), Georgia, serif;
-  font-size: 42px;
-  line-height: 1;
-  color: var(--accent);
-}
-
 .context-stack h2,
 .input-pane h2 {
   font-size: 12px;
@@ -498,8 +596,7 @@ summary {
   color: var(--accent-ink);
 }
 
-.source-capture-box,
-.pdf-source-box {
+.source-capture-box {
   border-top: 1px solid var(--rule);
   padding-top: 14px;
 }
@@ -538,6 +635,7 @@ summary {
   flex-wrap: wrap;
   gap: 8px;
   margin-top: 10px;
+  margin-bottom: 10px;
 }
 
 .source-kind-pills button {
@@ -584,6 +682,7 @@ summary {
   line-height: 1.4;
   text-align: center;
   cursor: pointer;
+  margin-top: 12px;
 }
 
 .source-file-dropzone:hover,
@@ -605,7 +704,7 @@ summary {
   overflow-wrap: anywhere;
 }
 
-.pdf-source-box button:disabled {
+.pdf-upload-actions button:disabled {
   opacity: 0.45;
   cursor: not-allowed;
 }
@@ -782,6 +881,30 @@ summary {
   font-weight: 650;
 }
 
+.study-section-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.study-section-heading h3 {
+  margin: 0;
+}
+
+.study-section-heading button {
+  width: auto;
+  padding: 4px 7px;
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.study-source-picker button.selected {
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--rule));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+}
+
 .study-surface {
   flex: 1;
   min-height: 0;
@@ -820,7 +943,7 @@ summary {
   text-transform: uppercase;
 }
 
-.study-inquiry input[aria-label="Study concept"] {
+.study-inquiry input[aria-label="Study search"] {
   border: 0;
   border-bottom: 1px solid var(--rule);
   border-radius: 0;

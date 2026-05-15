@@ -16,6 +16,8 @@ The aim is restraint: readable typography, durable files, fast navigation, and a
 
 Essai opens in **Write** mode: one central Markdown editor, no permanent preview, and as much calm space as possible for drafting.
 
+The left pane in Write mode is a manuscript section tree, not a file browser. It shows section names only. Each section points to its own Markdown file through `book.json`, so renaming or reordering sections updates the project metadata while the manuscript remains plain files on disk.
+
 The four modes are:
 
 - **Write**: the default writing desk. Editor only.
@@ -68,7 +70,7 @@ If the file does not exist, Essai creates it. Each capture is appended as:
 
 Older projects may still contain legacy inbox files. Essai keeps those files readable and does not delete them. New projects prefer `notes.md`.
 
-The right pane also contains a **Sources** box for links, citations, quotes, and raw references. Every source capture is appended to:
+The right pane also contains a single **Source** panel for links, citations, quotes, raw references, and files. Every text source capture is appended to:
 
 ```txt
 sources/raw.md
@@ -82,7 +84,7 @@ When a type is selected, Essai also mirrors the entry into the appropriate file:
 - `quote` -> `sources/Quotes.md`
 - `claim` -> `sources/Claims.md`
 
-Source files can be uploaded from the same right pane by choosing a file or dropping it onto the file target. Choose the source type before uploading. Essai stores the file inside the project under:
+Source files can be uploaded from the same Source panel by choosing a file or dropping it onto the file target. Choose the source type first. Dropped files are archived immediately and refresh the Study index; chosen files are archived when **Upload File** is pressed. Essai stores each file inside the project under:
 
 ```txt
 sources/files/<type>/
@@ -105,6 +107,14 @@ Uploaded source file.
 ```
 
 The stored filename is timestamped and sanitized so source folders stay git-friendly. Unknown source types fall back to `raw`, and empty files are rejected before any Markdown index is changed.
+
+Every text source capture and uploaded source file also refreshes:
+
+```txt
+sources/.study-index.json
+```
+
+This generated Study index contains source chunks and uploaded-file metadata used by Study search. It can be regenerated from the readable Markdown ledgers and archived files.
 
 ## Architecture
 
@@ -199,6 +209,7 @@ Text sources and uploaded source files are deliberately handled as archive opera
 - Typed files such as `sources/Papers.md` and `sources/Books.md` are filtered indexes.
 - Uploaded files live under `sources/files/<type>/`.
 - Markdown indexes link to uploaded files with relative links, so the project folder remains portable.
+- `sources/.study-index.json` is refreshed after every source capture or file upload so Study search can use the latest archive state.
 - AI may later classify or summarize sources, but it must not alter `main.md` without an explicit human action.
 
 The current source types are:
@@ -240,6 +251,7 @@ The test suite covers:
 - preservation of legacy inbox files
 - text source indexing and typed mirroring
 - source file storage, sanitization, and Markdown indexing
+- Study source index refresh after source capture and upload
 - binary storage list/read/rename/delete behavior
 - write/preview/read mode switching
 - study mode archive investigation from `sources/`

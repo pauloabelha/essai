@@ -5,20 +5,15 @@ import { useRouter } from "next/navigation";
 import type { CSSProperties, Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Archive,
   BookOpen,
-  ChevronDown,
-  FilePlus,
-  FolderPlus,
   GitBranch,
   Maximize2,
   Moon,
+  Pencil,
   Plus,
   Save,
-  Search,
   SplitSquareHorizontal,
   Sun,
-  Trash2,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { MarkdownView } from "@/components/reading/markdown-view";
@@ -26,7 +21,7 @@ import type { AiSuggestion } from "@/lib/ai/types";
 import { expandSlashCommand, slashSnippets } from "@/lib/editor/slash";
 import { countNoteBlocks } from "@/lib/projects/notes";
 import type { SourceKind } from "@/lib/projects/sources";
-import type { BookMetadata } from "@/lib/projects/templates";
+import type { BookMetadata, ManuscriptSection } from "@/lib/projects/templates";
 import type { FileNode } from "@/lib/storage/types";
 
 const MarkdownEditor = dynamic(
@@ -108,10 +103,6 @@ export function EssaiApp({
   const [viewMode, setViewMode] = useState<ViewMode>("write");
   const [splitPreview, setSplitPreview] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState<
-    Array<{ path: string; snippet: string }>
-  >([]);
   const [commandOpen, setCommandOpen] = useState(false);
   const [newBookTitle, setNewBookTitle] = useState("");
   const [notesCaptureOpen, setNotesCaptureOpen] = useState(false);
@@ -119,11 +110,13 @@ export function EssaiApp({
   const [sourceInput, setSourceInput] = useState("");
   const [sourceKind, setSourceKind] = useState<SourceKind>("raw");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
-  const [pdfKind, setPdfKind] = useState<SourceKind>("paper");
   const [captureStatus, setCaptureStatus] = useState("");
   const [notesCount, setNotesCount] = useState(0);
   const [studyQuery, setStudyQuery] = useState("programmable machines");
   const [studyExhaustive, setStudyExhaustive] = useState(true);
+  const [studySelectedSources, setStudySelectedSources] = useState<string[]>(
+    [],
+  );
   const [studyInvestigation, setStudyInvestigation] =
     useState<StudyInvestigation | null>(null);
   const [studyLoading, setStudyLoading] = useState(false);
@@ -133,6 +126,9 @@ export function EssaiApp({
   const router = useRouter();
 
   const activeBook = books.find((book) => book.id === bookId);
+  const manuscriptSections = activeBook?.sections?.length
+    ? activeBook.sections
+    : [{ id: "main", title: "Main", path: "main.md" }];
 
   const loadBooks = useCallback(async () => {
     const response = await fetch("/api/books");
@@ -190,20 +186,6 @@ export function EssaiApp({
     if (!bookId) return;
     loadFiles().then(() => loadFile(openPath));
   }, [bookId, loadFiles, loadFile, openPath]);
-
-  useEffect(() => {
-    if (!searchQuery || !bookId) {
-      setSearchResults([]);
-      return;
-    }
-    const handle = window.setTimeout(async () => {
-      const response = await fetch(
-        `/api/books/${bookId}/files?q=${encodeURIComponent(searchQuery)}`,
-      );
-      setSearchResults(await response.json());
-    }, 180);
-    return () => window.clearTimeout(handle);
-  }, [bookId, searchQuery]);
 
   const wrapSelection = useCallback((before: string, after: string) => {
     const selected = window.getSelection()?.toString();
@@ -270,6 +252,7 @@ export function EssaiApp({
   const archiveFiles = allFiles
     .map((file) => cleanProjectPath(file.path, bookId))
     .filter((path) => path.startsWith("sources/"));
+  const studySourceFiles = archiveFiles.filter((path) => path.endsWith(".md"));
   const objectFiles = allFiles
     .map((file) => cleanProjectPath(file.path, bookId))
     .filter((path) => path.startsWith("objects/") && path.endsWith(".md"));
@@ -296,6 +279,7 @@ export function EssaiApp({
           q: studyQuery,
           mode: studyExhaustive ? "exhaustive" : "fast",
         });
+        studySelectedSources.forEach((path) => params.append("source", path));
         const response = await fetch(`/api/books/${bookId}/study?${params}`, {
           signal: controller.signal,
         });
@@ -312,7 +296,14 @@ export function EssaiApp({
       controller.abort();
       window.clearTimeout(handle);
     };
-  }, [bookId, files, studyExhaustive, studyQuery, viewMode]);
+  }, [
+    bookId,
+    files,
+    studyExhaustive,
+    studyQuery,
+    studySelectedSources,
+    viewMode,
+  ]);
 
   async function createNewBook(titleFromForm?: string) {
     const title = titleFromForm || window.prompt("Book title");
@@ -398,11 +389,12 @@ export function EssaiApp({
     window.setTimeout(() => setCaptureStatus(""), 1600);
   }
 
-  async function uploadSourceFile() {
-    if (!bookId || !pdfFile) return;
+  async function uploadSourceFile(fileOverride?: File) {
+    const file = fileOverride ?? pdfFile;
+    if (!bookId || !file) return;
     const form = new FormData();
-    form.append("file", pdfFile);
-    form.append("kind", pdfKind);
+    form.append("file", file);
+    form.append("kind", sourceKind);
     try {
       const response = await fetch(`/api/books/${bookId}/sources/upload`, {
         method: "POST",
@@ -423,26 +415,35 @@ export function EssaiApp({
     }
     setPdfFile(null);
     if (pdfInputRef.current) pdfInputRef.current.value = "";
-    setCaptureStatus(`File saved as ${pdfKind}.`);
+    setCaptureStatus(`File saved as ${sourceKind}.`);
     await loadFiles();
     if (openPath.startsWith("sources/")) await loadFile(openPath);
     window.setTimeout(() => setCaptureStatus(""), 1800);
   }
 
-  async function archiveCurrentBook() {
-    if (!bookId || !window.confirm("Archive this book?")) return;
-    await fetch(`/api/books/${bookId}`, {
+  async function updateManuscriptSections(nextSections: ManuscriptSection[]) {
+    if (!bookId) return;
+    const response = await fetch(`/api/books/${bookId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ archived: true }),
+      body: JSON.stringify({ sections: nextSections }),
     });
-    await loadBooks();
+    if (!response.ok) return;
+    const updated = (await response.json()) as BookMetadata;
+    setBooks((current) =>
+      current.map((book) => (book.id === updated.id ? updated : book)),
+    );
   }
 
-  async function deleteCurrentBook() {
-    if (!bookId || !window.confirm("Delete this book directory?")) return;
-    await fetch(`/api/books/${bookId}`, { method: "DELETE" });
-    await loadBooks();
+  function moveManuscriptSection(dragId: string, targetId: string) {
+    if (dragId === targetId) return;
+    const result = moveSectionBefore(manuscriptSections, dragId, targetId);
+    if (result) updateManuscriptSections(result);
+  }
+
+  function renameManuscriptSection(sectionId: string, title: string) {
+    const result = updateSectionTitle(manuscriptSections, sectionId, title);
+    if (result) updateManuscriptSections(result);
   }
 
   async function askAi(kind: string) {
@@ -519,6 +520,8 @@ export function EssaiApp({
       {viewMode === "study" && !focusMode ? (
         <StudySidebar
           archiveFiles={archiveFiles}
+          sourceFiles={studySourceFiles}
+          selectedSources={studySelectedSources}
           objectFiles={objectFiles}
           notesCount={notesCount}
           investigation={studyInvestigation}
@@ -530,9 +533,17 @@ export function EssaiApp({
             setStudyQuery(concept);
             setViewMode("study");
           }}
+          onToggleSource={(path) =>
+            setStudySelectedSources((selected) =>
+              selected.includes(path)
+                ? selected.filter((source) => source !== path)
+                : [...selected, path],
+            )
+          }
+          onClearSources={() => setStudySelectedSources([])}
         />
       ) : viewMode !== "read" && !focusMode ? (
-        <aside className="left-pane" aria-label="Files">
+        <aside className="left-pane" aria-label="Manuscript sections">
           <div className="brand-row">
             <div>
               <p className="eyebrow">essai</p>
@@ -556,66 +567,13 @@ export function EssaiApp({
               <Plus size={16} />
             </button>
           </div>
-
-          <label className="search-box">
-            <Search size={15} />
-            <input
-              placeholder="Search"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-            />
-          </label>
-
-          {searchResults.length ? (
-            <div className="search-results">
-              {searchResults.map((result) => (
-                <button key={result.path} onClick={() => loadFile(result.path)}>
-                  <strong>{result.path}</strong>
-                  <span>{result.snippet}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
-
-          <div className="quick-actions">
-            <button onClick={() => createNote("inbox")}>
-              <FilePlus size={15} /> Note
-            </button>
-            <button onClick={() => createNote("concepts")}>
-              <FolderPlus size={15} /> Concept
-            </button>
-          </div>
-
-          <nav className="quick-links">
-            <button className="notes-link" onClick={openCurrentNotes}>
-              Notes
-            </button>
-            {[
-              "main.md",
-              "notes.md",
-              "README.md",
-              "sources/Books.md",
-              "sources/Papers.md",
-              "sources/Claims.md",
-            ].map((path) => (
-              <button key={path} onClick={() => loadFile(path)}>
-                {path}
-              </button>
-            ))}
-          </nav>
-
-          <div className="file-tree">
-            {files.map((node) => renderNode(node, bookId, loadFile))}
-          </div>
-
-          <div className="book-danger">
-            <button onClick={archiveCurrentBook}>
-              <Archive size={14} /> Archive
-            </button>
-            <button onClick={deleteCurrentBook}>
-              <Trash2 size={14} /> Delete
-            </button>
-          </div>
+          <SectionTree
+            sections={manuscriptSections}
+            activePath={openPath}
+            onOpen={loadFile}
+            onMove={moveManuscriptSection}
+            onRename={renameManuscriptSection}
+          />
         </aside>
       ) : null}
 
@@ -701,6 +659,7 @@ export function EssaiApp({
           <StudySurface
             query={studyQuery}
             exhaustive={studyExhaustive}
+            selectedSources={studySelectedSources}
             loading={studyLoading}
             investigation={studyInvestigation}
             onQueryChange={setStudyQuery}
@@ -735,18 +694,36 @@ export function EssaiApp({
             sourceValue={sourceInput}
             sourceKind={sourceKind}
             pdfFile={pdfFile}
-            pdfKind={pdfKind}
             pdfInputRef={pdfInputRef}
             onSourceChange={setSourceInput}
             onSourceKindChange={setSourceKind}
             onSourceCommit={commitSource}
             onPdfChange={setPdfFile}
-            onPdfKindChange={setPdfKind}
             onPdfUpload={uploadSourceFile}
-            notesCount={notesCount}
-            hasCurrentNotes={hasCurrentNotes}
+            onPdfDrop={uploadSourceFile}
             onAi={askAi}
-            onOpenCurrentNotes={openCurrentNotes}
+          />
+        </aside>
+      ) : null}
+
+      {viewMode === "study" && !focusMode ? (
+        <aside className="right-pane study-input-pane" aria-label="Input">
+          <InputPane
+            noteValue={noteInput}
+            onNoteChange={setNoteInput}
+            onNoteCommit={commitNote}
+            noteTextareaRef={noteInputRef}
+            sourceValue={sourceInput}
+            sourceKind={sourceKind}
+            pdfFile={pdfFile}
+            pdfInputRef={pdfInputRef}
+            onSourceChange={setSourceInput}
+            onSourceKindChange={setSourceKind}
+            onSourceCommit={commitSource}
+            onPdfChange={setPdfFile}
+            onPdfUpload={uploadSourceFile}
+            onPdfDrop={uploadSourceFile}
+            onAi={askAi}
           />
         </aside>
       ) : null}
@@ -808,18 +785,14 @@ function InputPane({
   sourceValue,
   sourceKind,
   pdfFile,
-  pdfKind,
   pdfInputRef,
   onSourceChange,
   onSourceKindChange,
   onSourceCommit,
   onPdfChange,
-  onPdfKindChange,
   onPdfUpload,
-  notesCount,
-  hasCurrentNotes,
+  onPdfDrop,
   onAi,
-  onOpenCurrentNotes,
 }: {
   noteValue: string;
   onNoteChange: (value: string) => void;
@@ -828,18 +801,14 @@ function InputPane({
   sourceValue: string;
   sourceKind: SourceKind;
   pdfFile: File | null;
-  pdfKind: SourceKind;
   pdfInputRef: RefObject<HTMLInputElement | null>;
   onSourceChange: (value: string) => void;
   onSourceKindChange: (value: SourceKind) => void;
   onSourceCommit: () => void;
   onPdfChange: (value: File | null) => void;
-  onPdfKindChange: (value: SourceKind) => void;
   onPdfUpload: () => void;
-  notesCount: number;
-  hasCurrentNotes: boolean;
+  onPdfDrop: (file: File) => void;
   onAi: (kind: string) => void;
-  onOpenCurrentNotes: () => void;
 }) {
   const sourceKinds = [
     "raw",
@@ -851,24 +820,6 @@ function InputPane({
   ] satisfies SourceKind[];
   return (
     <div className="input-pane">
-      <section className="notes-panel">
-        <h2>Notes</h2>
-        {hasCurrentNotes ? (
-          <>
-            <p className="notes-count">{notesCount}</p>
-            <p className="muted">Notes waiting safely.</p>
-            <button onClick={onOpenCurrentNotes}>Open Notes</button>
-            <button onClick={() => onAi("reindex-inbox")}>
-              Organize later
-            </button>
-          </>
-        ) : (
-          <>
-            <p className="muted">No notes file yet.</p>
-            <button onClick={onOpenCurrentNotes}>Create Notes</button>
-          </>
-        )}
-      </section>
       <section className="notes-capture-box">
         <p className="eyebrow">Notes</p>
         <textarea
@@ -889,32 +840,30 @@ function InputPane({
         <p className="muted">Saved to notes.md</p>
       </section>
       <section className="source-capture-box">
-        <p className="eyebrow">Sources</p>
-        <textarea
-          aria-label="Sources input"
-          placeholder="Paste a link, citation, quote, or raw source."
-          value={sourceValue}
-          onChange={(event) => onSourceChange(event.target.value)}
-        />
+        <p className="eyebrow">Source</p>
         <SourceKindPills
           label="Source type"
           value={sourceKind}
           kinds={sourceKinds}
           onChange={onSourceKindChange}
         />
+        <textarea
+          aria-label="Sources input"
+          placeholder="Paste a link, citation, quote, or raw source."
+          value={sourceValue}
+          onChange={(event) => onSourceChange(event.target.value)}
+        />
         <div className="source-actions">
           <button onClick={onSourceCommit}>Commit Source</button>
         </div>
-        <p className="muted">Saved to sources/raw.md and mirrored by type.</p>
-      </section>
-      <section className="pdf-source-box">
-        <p className="eyebrow">Source file</p>
         <label
           className="source-file-dropzone"
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => {
             event.preventDefault();
-            onPdfChange(event.dataTransfer.files?.[0] ?? null);
+            const file = event.dataTransfer.files?.[0] ?? null;
+            onPdfChange(file);
+            if (file) onPdfDrop(file);
           }}
         >
           <input
@@ -925,25 +874,197 @@ function InputPane({
           />
           <span>{pdfFile ? pdfFile.name : "Drop a file or choose one"}</span>
         </label>
-        <SourceKindPills
-          label="File source type"
-          value={pdfKind}
-          kinds={sourceKinds}
-          onChange={onPdfKindChange}
-        />
         <div className="pdf-upload-actions">
-          <button onClick={onPdfUpload} disabled={!pdfFile}>
+          <button onClick={() => onPdfUpload()} disabled={!pdfFile}>
             Upload File
           </button>
         </div>
         <p className="muted">
-          Stored under sources/files and indexed in Markdown.
+          Text is saved to sources/raw.md and mirrored by type. Files are stored
+          under sources/files and indexed for Study.
         </p>
       </section>
       <section className="quiet-process">
         <h2>Later</h2>
         <button onClick={() => onAi("reindex-inbox")}>Organize notes</button>
       </section>
+    </div>
+  );
+}
+
+function SectionTree({
+  sections,
+  activePath,
+  onOpen,
+  onMove,
+  onRename,
+}: {
+  sections: ManuscriptSection[];
+  activePath: string;
+  onOpen: (path: string) => void;
+  onMove: (dragId: string, targetId: string) => void;
+  onRename: (sectionId: string, title: string) => void;
+}) {
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  return (
+    <nav className="section-tree" aria-label="Sections">
+      <div className="section-tree-heading">
+        <p className="eyebrow">Sections</p>
+      </div>
+      {sections.map((section) => (
+        <SectionTreeItem
+          key={section.id}
+          section={section}
+          activePath={activePath}
+          draggingId={draggingId}
+          depth={0}
+          onOpen={onOpen}
+          onMove={onMove}
+          onRename={onRename}
+          onDragStart={setDraggingId}
+          onDragEnd={() => setDraggingId(null)}
+        />
+      ))}
+    </nav>
+  );
+}
+
+function SectionTreeItem({
+  section,
+  activePath,
+  draggingId,
+  depth,
+  onOpen,
+  onMove,
+  onRename,
+  onDragStart,
+  onDragEnd,
+}: {
+  section: ManuscriptSection;
+  activePath: string;
+  draggingId: string | null;
+  depth: number;
+  onOpen: (path: string) => void;
+  onMove: (dragId: string, targetId: string) => void;
+  onRename: (sectionId: string, title: string) => void;
+  onDragStart: (id: string) => void;
+  onDragEnd: () => void;
+}) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState(section.title);
+  const renameCommittedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isEditing) setEditTitle(section.title);
+  }, [isEditing, section.title]);
+
+  function commitRename() {
+    if (renameCommittedRef.current) return;
+    renameCommittedRef.current = true;
+    const nextTitle = editTitle.trim();
+    setIsEditing(false);
+    if (!nextTitle) {
+      setEditTitle(section.title);
+      return;
+    }
+    if (nextTitle !== section.title) onRename(section.id, nextTitle);
+  }
+
+  return (
+    <div className="section-tree-node">
+      <div
+        className={[
+          "section-row",
+          activePath === section.path ? "active" : "",
+          draggingId === section.id ? "dragging" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        style={{ "--section-depth": depth } as CSSProperties}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = "move";
+        }}
+        onDrop={(event) => {
+          event.preventDefault();
+          const dragId = event.dataTransfer.getData("text/plain");
+          if (dragId) onMove(dragId, section.id);
+          onDragEnd();
+        }}
+      >
+        {isEditing ? (
+          <form
+            className="section-rename-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              commitRename();
+            }}
+          >
+            <input
+              aria-label="Section name"
+              value={editTitle}
+              onChange={(event) => setEditTitle(event.target.value)}
+              onBlur={commitRename}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.preventDefault();
+                  renameCommittedRef.current = true;
+                  setEditTitle(section.title);
+                  setIsEditing(false);
+                }
+              }}
+              autoFocus
+            />
+          </form>
+        ) : (
+          <>
+            <button
+              type="button"
+              draggable
+              className="section-open-button"
+              onClick={() => onOpen(section.path)}
+              onDragStart={(event) => {
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", section.id);
+                onDragStart(section.id);
+              }}
+              onDragEnd={onDragEnd}
+            >
+              <span>{section.title}</span>
+            </button>
+            <button
+              type="button"
+              className="section-rename-button"
+              aria-label={`Rename ${section.title}`}
+              title="Rename section"
+              onClick={() => {
+                renameCommittedRef.current = false;
+                setIsEditing(true);
+              }}
+            >
+              <Pencil size={12} />
+            </button>
+          </>
+        )}
+      </div>
+      {section.children?.length ? (
+        <div className="section-tree-children">
+          {section.children.map((child) => (
+            <SectionTreeItem
+              key={child.id}
+              section={child}
+              activePath={activePath}
+              draggingId={draggingId}
+              depth={depth + 1}
+              onOpen={onOpen}
+              onMove={onMove}
+              onRename={onRename}
+              onDragStart={onDragStart}
+              onDragEnd={onDragEnd}
+            />
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -979,18 +1100,26 @@ function SourceKindPills({
 
 function StudySidebar({
   archiveFiles,
+  sourceFiles,
+  selectedSources,
   objectFiles,
   notesCount,
   investigation,
   onOpenFile,
   onStudyConcept,
+  onToggleSource,
+  onClearSources,
 }: {
   archiveFiles: string[];
+  sourceFiles: string[];
+  selectedSources: string[];
   objectFiles: string[];
   notesCount: number;
   investigation: StudyInvestigation | null;
   onOpenFile: (path: string) => void;
   onStudyConcept: (concept: string) => void;
+  onToggleSource: (path: string) => void;
+  onClearSources: () => void;
 }) {
   const sourceCounts = {
     Books: archiveFiles.filter((path) => path.includes("Books.md")).length,
@@ -1017,11 +1146,30 @@ function StudySidebar({
         <button>Recent investigations</button>
       </nav>
       <section className="study-sidebar-section">
-        <h3>Filters</h3>
+        <h3>Archive</h3>
         {Object.entries(sourceCounts).map(([label, count]) => (
           <button key={label} onClick={() => onOpenFile(sourcePathFor(label))}>
             <span>{label}</span>
             <strong>{count}</strong>
+          </button>
+        ))}
+      </section>
+      <section className="study-sidebar-section study-source-picker">
+        <div className="study-section-heading">
+          <h3>Study Sources</h3>
+          <button type="button" onClick={onClearSources}>
+            All
+          </button>
+        </div>
+        {sourceFiles.map((path) => (
+          <button
+            key={path}
+            type="button"
+            className={selectedSources.includes(path) ? "selected" : ""}
+            aria-pressed={selectedSources.includes(path)}
+            onClick={() => onToggleSource(path)}
+          >
+            <span>{path.replace(/^sources\//, "")}</span>
           </button>
         ))}
       </section>
@@ -1057,6 +1205,7 @@ function StudySidebar({
 function StudySurface({
   query,
   exhaustive,
+  selectedSources,
   loading,
   investigation,
   onQueryChange,
@@ -1066,6 +1215,7 @@ function StudySurface({
 }: {
   query: string;
   exhaustive: boolean;
+  selectedSources: string[];
   loading: boolean;
   investigation: StudyInvestigation | null;
   onQueryChange: (value: string) => void;
@@ -1077,11 +1227,12 @@ function StudySurface({
     <div className="study-surface">
       <section className="study-inquiry">
         <label>
-          <span>Concept investigation</span>
+          <span>Search archive</span>
           <input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            aria-label="Study concept"
+            aria-label="Study search"
+            placeholder="Search concepts, sources, claims, and objects"
           />
         </label>
         <div className="study-audit-toggle" aria-label="Retrieval depth">
@@ -1115,6 +1266,11 @@ function StudySurface({
             </span>
             <span>{investigation?.sourceCoverage.chunks ?? 0} chunks</span>
             <span>{investigation?.sourceCoverage.files ?? 0} files</span>
+            <span>
+              {selectedSources.length
+                ? `${selectedSources.length} selected`
+                : "all sources"}
+            </span>
             <span>
               {investigation?.sourceCoverage.scope ?? "Preparing audit"}
             </span>
@@ -1268,13 +1424,13 @@ function StudyGraph({
         </div>
       ))}
       <div className="graph-relations">
-        {investigation.graph.links.slice(0, 9).map((link) => (
+        {investigation.graph.links.slice(0, 9).map((link, index) => (
           <span
-            key={`${link.from}-${link.to}`}
+            key={`${link.from}-${link.to}-${index}`}
             className={link.strength}
             style={
               {
-                "--graph-link-index": investigation.graph.links.indexOf(link),
+                "--graph-link-index": index,
               } as CSSProperties
             }
           />
@@ -1387,33 +1543,6 @@ function NotesCaptureModal({
   );
 }
 
-function renderNode(
-  node: FileNode,
-  bookId: string,
-  loadFile: (path: string) => void,
-) {
-  const cleanPath = cleanProjectPath(node.path, bookId);
-  if (node.kind === "directory") {
-    return (
-      <details key={node.path} open>
-        <summary>
-          <ChevronDown size={13} /> {node.name}
-        </summary>
-        {node.children?.map((child) => renderNode(child, bookId, loadFile))}
-      </details>
-    );
-  }
-  return (
-    <button
-      key={node.path}
-      className="file-row"
-      onClick={() => loadFile(cleanPath)}
-    >
-      {node.name}
-    </button>
-  );
-}
-
 function flattenNodes(nodes: FileNode[]): FileNode[] {
   return nodes.flatMap((node) => [
     node,
@@ -1443,6 +1572,90 @@ function sourcePathFor(label: string) {
       "Uploaded files": "sources/raw.md",
     }[label] ?? "sources/raw.md"
   );
+}
+
+function moveSectionBefore(
+  sections: ManuscriptSection[],
+  dragId: string,
+  targetId: string,
+) {
+  const { sections: withoutDragged, section } = removeSection(sections, dragId);
+  if (!section) return null;
+  const inserted = insertSectionBefore(withoutDragged, targetId, section);
+  return inserted ?? sections;
+}
+
+function removeSection(
+  sections: ManuscriptSection[],
+  id: string,
+): { sections: ManuscriptSection[]; section: ManuscriptSection | null } {
+  let removed: ManuscriptSection | null = null;
+  const next = sections.flatMap((section) => {
+    if (section.id === id) {
+      removed = section;
+      return [];
+    }
+    const childResult = removeSection(section.children ?? [], id);
+    if (childResult.section) {
+      removed = childResult.section;
+      return [{ ...section, children: childResult.sections }];
+    }
+    return [section];
+  });
+  return { sections: next, section: removed };
+}
+
+function insertSectionBefore(
+  sections: ManuscriptSection[],
+  targetId: string,
+  sectionToInsert: ManuscriptSection,
+): ManuscriptSection[] | null {
+  const targetIndex = sections.findIndex((section) => section.id === targetId);
+  if (targetIndex !== -1) {
+    return [
+      ...sections.slice(0, targetIndex),
+      sectionToInsert,
+      ...sections.slice(targetIndex),
+    ];
+  }
+  for (const section of sections) {
+    const children = insertSectionBefore(
+      section.children ?? [],
+      targetId,
+      sectionToInsert,
+    );
+    if (children) {
+      return sections.map((item) =>
+        item.id === section.id ? { ...item, children } : item,
+      );
+    }
+  }
+  return null;
+}
+
+function updateSectionTitle(
+  sections: ManuscriptSection[],
+  sectionId: string,
+  title: string,
+): ManuscriptSection[] | null {
+  let changed = false;
+  const next = sections.map((section) => {
+    if (section.id === sectionId) {
+      changed = true;
+      return { ...section, title };
+    }
+    const children = updateSectionTitle(
+      section.children ?? [],
+      sectionId,
+      title,
+    );
+    if (children) {
+      changed = true;
+      return { ...section, children };
+    }
+    return section;
+  });
+  return changed ? next : null;
 }
 
 function titleCase(value: string) {

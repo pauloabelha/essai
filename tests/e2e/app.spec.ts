@@ -12,11 +12,40 @@ test("create project, capture notes and sources, write, focus, read, and navigat
   await page.goto(`/projects/${book.id}`);
 
   await expect(
-    page.getByRole("complementary", { name: "Files" }).getByRole("combobox"),
+    page
+      .getByRole("complementary", { name: "Manuscript sections" })
+      .getByRole("combobox"),
   ).toHaveValue(book.id);
   await expect(page).toHaveURL(new RegExp(`/projects/${book.id}`));
   await expect(page.locator(".workspace")).toHaveClass(/mode-write/);
   await expect(page.locator(".preview-shell")).toHaveCount(0);
+  await page.getByRole("button", { name: "Dark mode" }).click();
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await expect(page.locator(".cm-scroller")).toHaveCSS(
+    "background-color",
+    "rgb(15, 14, 12)",
+  );
+  await page.getByRole("button", { name: "Light mode" }).click();
+  await page.getByRole("button", { name: "Rename Main" }).click();
+  await page.getByLabel("Section name").fill("Opening");
+  await page.keyboard.press("Enter");
+  await expect(
+    page
+      .getByRole("navigation", { name: "Sections" })
+      .getByRole("button", { name: "Opening", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("navigation", { name: "Sections" }).getByText("main.md"),
+  ).toHaveCount(0);
+  const listedBooks = (await (
+    await request.get("/api/books")
+  ).json()) as Array<{
+    id: string;
+    sections?: Array<{ title: string; path: string }>;
+  }>;
+  expect(
+    listedBooks.find((listedBook) => listedBook.id === book.id)?.sections?.[0],
+  ).toMatchObject({ title: "Opening", path: "main.md" });
 
   await page.getByLabel("Notes input").fill("A captured note for later.");
   await page.getByRole("button", { name: "Submit Note" }).click();
@@ -30,8 +59,10 @@ test("create project, capture notes and sources, write, focus, read, and navigat
   await page.getByRole("button", { name: "Commit Source" }).click();
   await expect(page.getByText("Source saved as paper.")).toBeVisible();
   await page.getByRole("button", { name: "Study" }).click();
-  await page.getByLabel("Study concept").fill("example source");
+  await page.getByRole("button", { name: "Papers.md" }).click();
+  await page.getByLabel("Study search").fill("example source");
   await expect(page.locator(".app-frame")).toHaveClass(/study-active/);
+  await expect(page.getByLabel("Input")).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Direct References" }),
   ).toBeVisible();
@@ -48,7 +79,7 @@ test("create project, capture notes and sources, write, focus, read, and navigat
     buffer: Buffer.from("source notes\n"),
   });
   await page
-    .getByRole("radiogroup", { name: "File source type", exact: true })
+    .getByRole("radiogroup", { name: "Source type", exact: true })
     .getByRole("radio", { name: "book" })
     .click();
   await page.getByRole("button", { name: "Upload File" }).click();
@@ -65,7 +96,7 @@ test("create project, capture notes and sources, write, focus, read, and navigat
 
   await page
     .getByRole("navigation")
-    .getByRole("button", { name: "main.md" })
+    .getByRole("button", { name: "Opening" })
     .click();
   await page.locator(".cm-content").click();
   await page.keyboard.type("A sentence about [[music-cylinder]].");

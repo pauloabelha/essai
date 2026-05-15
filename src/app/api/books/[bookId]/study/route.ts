@@ -10,10 +10,12 @@ export async function GET(
   const url = new URL(request.url);
   const query = url.searchParams.get("q") ?? "";
   const exhaustive = url.searchParams.get("mode") !== "fast";
+  const sourcePaths = url.searchParams.getAll("source");
   return NextResponse.json(
     await buildStudyInvestigation(getServerStorage(), bookId, {
       query,
       exhaustive,
+      sourcePaths,
     }),
   );
 }

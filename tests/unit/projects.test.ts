@@ -13,6 +13,13 @@ describe("project creation", () => {
     const storage = new InMemoryStorageProvider();
     const book = await createBook(storage, "My Book");
     expect(book.id).toBe("my-book");
+    expect(book.sections).toEqual([
+      {
+        id: "main",
+        title: "Main",
+        path: "main.md",
+      },
+    ]);
     expect(await storage.readFile("projects/my-book/main.md")).toBe("");
     expect(await storage.readFile("projects/my-book/notes.md")).toContain(
       "Notes",
@@ -96,6 +103,9 @@ describe("project creation", () => {
     expect(
       await storage.readFile("projects/my-book/sources/Papers.md"),
     ).toContain("Type: paper");
+    expect(
+      await storage.readFile("projects/my-book/sources/.study-index.json"),
+    ).toContain("https://example.com/paper");
   });
 
   it("stores uploaded source files in typed source folders and indexes them", async () => {
@@ -126,6 +136,9 @@ describe("project creation", () => {
     expect(
       await storage.readFile("projects/my-book/sources/Papers.md"),
     ).toContain("Uploaded source file.");
+    expect(
+      await storage.readFile("projects/my-book/sources/.study-index.json"),
+    ).toContain("Important-Notes.txt");
   });
 
   it("rejects empty source file uploads before indexing them", async () => {

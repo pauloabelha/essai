@@ -3,6 +3,8 @@
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
 import { EditorView } from "@codemirror/view";
+import { useTheme } from "next-themes";
+import { useMemo } from "react";
 
 export function MarkdownEditor({
   value,
@@ -11,6 +13,74 @@ export function MarkdownEditor({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const { resolvedTheme } = useTheme();
+  const isDark = resolvedTheme === "dark";
+  const editorTheme = useMemo(
+    () =>
+      EditorView.theme(
+        {
+          "&": {
+            background: "var(--editor-bg)",
+            color: "var(--editor-ink)",
+            fontSize: "16px",
+            height: "100%",
+          },
+          ".cm-editor": {
+            background: "var(--editor-bg)",
+          },
+          ".cm-content": {
+            fontFamily:
+              'var(--font-mono), "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
+            lineHeight: "1.75",
+            padding: "52px 0",
+            color: "var(--editor-ink)",
+            caretColor: "var(--editor-caret)",
+            width: "min(920px, calc(100% - 96px))",
+            margin: "0 auto",
+          },
+          ".cm-line": {
+            padding: "0",
+          },
+          ".cm-scroller": {
+            background: "var(--editor-bg)",
+            fontFamily: "inherit",
+          },
+          ".cm-focused": {
+            outline: "none",
+          },
+          ".cm-cursor": {
+            borderLeftColor: "var(--editor-caret)",
+          },
+          "&.cm-focused .cm-selectionBackground, .cm-selectionBackground, ::selection":
+            {
+              backgroundColor: "var(--editor-selection)",
+            },
+          ".cm-gutters": {
+            background: "var(--editor-bg)",
+            border: "none",
+            color: "var(--editor-muted)",
+          },
+          ".cm-activeLine": {
+            background: "var(--editor-line)",
+          },
+          ".cm-placeholder": {
+            color: "var(--editor-muted)",
+          },
+          ".cm-matchingBracket": {
+            background: "var(--editor-selection)",
+            color: "var(--editor-ink)",
+          },
+          ".cm-panels, .cm-tooltip": {
+            background: "var(--surface-2)",
+            borderColor: "var(--rule)",
+            color: "var(--ink)",
+          },
+        },
+        { dark: isDark },
+      ),
+    [isDark],
+  );
+
   return (
     <CodeMirror
       value={value}
@@ -21,45 +91,9 @@ export function MarkdownEditor({
         highlightActiveLine: false,
         highlightActiveLineGutter: false,
       }}
-      extensions={[
-        markdown(),
-        EditorView.lineWrapping,
-        EditorView.theme({
-          "&": {
-            background: "transparent",
-            fontSize: "16px",
-            height: "100%",
-          },
-          ".cm-content": {
-            fontFamily:
-              'var(--font-mono), "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace',
-            lineHeight: "1.75",
-            padding: "52px 0",
-            color: "var(--ink)",
-            caretColor: "var(--ink)",
-            width: "min(920px, calc(100% - 96px))",
-            margin: "0 auto",
-          },
-          ".cm-line": {
-            padding: "0",
-          },
-          ".cm-scroller": {
-            fontFamily: "inherit",
-          },
-          ".cm-focused": {
-            outline: "none",
-          },
-          ".cm-gutters": {
-            background: "transparent",
-            border: "none",
-          },
-          ".cm-activeLine": {
-            background: "transparent",
-          },
-        }),
-      ]}
+      extensions={[markdown(), EditorView.lineWrapping, editorTheme]}
       onChange={onChange}
-      theme="light"
+      theme={isDark ? "dark" : "light"}
     />
   );
 }

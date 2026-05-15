@@ -6,6 +6,14 @@ export interface BookMetadata {
   createdAt: string;
   updatedAt: string;
   archived?: boolean;
+  sections?: ManuscriptSection[];
+}
+
+export interface ManuscriptSection {
+  id: string;
+  title: string;
+  path: string;
+  children?: ManuscriptSection[];
 }
 
 export function slugifyBookId(title: string) {
@@ -31,6 +39,13 @@ export function createBookMetadata(
     language,
     createdAt: now,
     updatedAt: now,
+    sections: [
+      {
+        id: "main",
+        title: "Main",
+        path: "main.md",
+      },
+    ],
   };
 }
 

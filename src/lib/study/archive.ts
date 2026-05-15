@@ -1,6 +1,10 @@
 import { flattenFiles } from "@/lib/markdown/wiki";
 import { readBookFile, listBookFiles } from "@/lib/projects/files";
 import { bookRoot } from "@/lib/projects/service";
+import {
+  readOrRefreshStudySourceIndex,
+  type StudyIndexChunk,
+} from "@/lib/study/source-index";
 import type { StorageProvider } from "@/lib/storage/types";
 
 export interface StudyPassage {
@@ -53,14 +57,6 @@ export interface StudyInvestigation {
   auditLog: string[];
 }
 
-interface ArchiveChunk {
-  id: string;
-  path: string;
-  sourceType: string;
-  page: string;
-  text: string;
-}
-
 const SEMANTIC_NEIGHBORS: Record<string, string[]> = {
   programmable: [
     "automata",
@@ -107,10 +103,12 @@ export async function buildStudyInvestigation(
   input: {
     query?: string;
     exhaustive?: boolean;
+    sourcePaths?: string[];
   } = {},
 ): Promise<StudyInvestigation> {
   const query = (input.query ?? "").trim() || "sources";
   const exhaustive = input.exhaustive ?? true;
+  const selectedSources = new Set(input.sourcePaths ?? []);
   const files = flattenFiles(await listBookFiles(storage, bookId)).filter(
     (node) => node.kind === "file",
   );
@@ -119,21 +117,21 @@ export async function buildStudyInvestigation(
   const sourceFiles = files
     .map((file) => cleanPath(file.path))
     .filter((path) => path.startsWith("sources/"));
-  const sourceMarkdown = sourceFiles.filter((path) => path.endsWith(".md"));
+  const sourceMarkdown = sourceFiles.filter(
+    (path) =>
+      path.endsWith(".md") &&
+      (!selectedSources.size || selectedSources.has(path)),
+  );
   const uploadedFiles = sourceFiles.filter((path) =>
     path.startsWith("sources/files/"),
   );
-  const markdown = await Promise.all(
-    sourceMarkdown.map(async (path) => ({
-      path,
-      content: await readBookFile(storage, bookId, path),
-    })),
+  const index = await readOrRefreshStudySourceIndex(storage, bookId);
+  const chunks = index.chunks.filter(
+    (chunk) =>
+      sourceMarkdown.includes(chunk.path) ||
+      (!selectedSources.size && chunk.path.startsWith("sources/files/")),
   );
-  const chunks = markdown.flatMap((file) =>
-    chunkSourceFile(file.path, file.content),
-  );
-  const claimsFile = markdown.find((file) => file.path === "sources/Claims.md");
-  const claims = chunkClaims(claimsFile?.content ?? "");
+  const claims = chunks.filter((chunk) => chunk.path === "sources/Claims.md");
   const objectFiles = files
     .map((file) => cleanPath(file.path))
     .filter((path) => path.startsWith("objects/") && path.endsWith(".md"));
@@ -173,8 +171,12 @@ export async function buildStudyInvestigation(
       chunks: chunks.length,
       files: uploadedFiles.length,
       scope: exhaustive
-        ? "Exhaustive scholarly audit across /sources"
-        : "Fast semantic search across indexed source passages",
+        ? selectedSources.size
+          ? `Exhaustive scholarly audit across ${selectedSources.size} selected source index${selectedSources.size === 1 ? "" : "es"}`
+          : "Exhaustive scholarly audit across /sources"
+        : selectedSources.size
+          ? `Fast semantic search across ${selectedSources.size} selected source index${selectedSources.size === 1 ? "" : "es"}`
+          : "Fast semantic search across indexed source passages",
     },
     directReferences,
     conceptualEchoes,
@@ -182,48 +184,17 @@ export async function buildStudyInvestigation(
     relatedObjects,
     graph: buildGraph(query, directReferences, claimReferences, relatedObjects),
     auditLog: [
-      `Read ${sourceMarkdown.length} Markdown indexes from /sources.`,
+      `Read ${sourceMarkdown.length} Markdown index${sourceMarkdown.length === 1 ? "" : "es"} from /sources.`,
       `Identified ${uploadedFiles.length} uploaded source files.`,
-      `Examined ${chunks.length} source chunks${exhaustive ? " sequentially for recall" : " with fast scoring"}.`,
+      `Examined ${chunks.length} indexed source chunks${exhaustive ? " sequentially for recall" : " with fast scoring"}.`,
+      `Study index refreshed at ${index.updatedAt}.`,
       `Connected ${relatedObjects.length} related object records from /objects.`,
     ],
   };
 }
 
-function chunkSourceFile(path: string, content: string): ArchiveChunk[] {
-  const blocks = content
-    .split(/\n---\n/g)
-    .map((block) => block.trim())
-    .filter((block) => block && !/^#\s/.test(block));
-  const sourceType = sourceTypeFromPath(path);
-  const sourceBlocks = blocks.length
-    ? blocks
-    : [content.trim()].filter(Boolean);
-  return sourceBlocks.map((block, index) => ({
-    id: `${path}:${index}`,
-    path,
-    sourceType: parseType(block) ?? sourceType,
-    page: parsePage(block),
-    text: normalizePassage(block),
-  }));
-}
-
-function chunkClaims(content: string): ArchiveChunk[] {
-  return content
-    .split("\n")
-    .map((line) => line.trim())
-    .filter((line) => /^[-*]\s/.test(line))
-    .map((line, index) => ({
-      id: `sources/Claims.md:${index}`,
-      path: "sources/Claims.md",
-      sourceType: "claim",
-      page: "index",
-      text: line.replace(/^[-*]\s+\[[ x]\]\s*/i, "").replace(/^[-*]\s+/, ""),
-    }));
-}
-
 function rankChunks(
-  chunks: ArchiveChunk[],
+  chunks: StudyIndexChunk[],
   query: string,
   exhaustive: boolean,
 ) {
@@ -264,7 +235,7 @@ function rankObjects(
 }
 
 function passageFromChunk(
-  chunk: ArchiveChunk,
+  chunk: StudyIndexChunk,
   query: string,
   score: number,
 ): StudyPassage {
@@ -289,6 +260,18 @@ function buildGraph(
     { id: "concept", label: titleCase(query), kind: "concept" },
   ];
   const links: StudyGraphLink[] = [];
+  const addLink = (link: StudyGraphLink) => {
+    const existing = links.find(
+      (item) => item.from === link.from && item.to === link.to,
+    );
+    if (!existing) {
+      links.push(link);
+      return;
+    }
+    if (existing.strength === "secondary" && link.strength === "primary") {
+      existing.strength = "primary";
+    }
+  };
   for (const passage of direct.slice(0, 5)) {
     const id = `source:${passage.sourceFile}`;
     if (!nodes.some((node) => node.id === id)) {
@@ -298,7 +281,7 @@ function buildGraph(
         kind: "source",
       });
     }
-    links.push({
+    addLink({
       from: "concept",
       to: id,
       strength: passage.confidence === "High" ? "primary" : "secondary",
@@ -307,12 +290,12 @@ function buildGraph(
   for (const claim of claims.slice(0, 3)) {
     const id = `claim:${claim.id}`;
     nodes.push({ id, label: claim.quote.slice(0, 54), kind: "claim" });
-    links.push({ from: "concept", to: id, strength: "secondary" });
+    addLink({ from: "concept", to: id, strength: "secondary" });
   }
   for (const object of objects.slice(0, 4)) {
     const id = `object:${object.path}`;
     nodes.push({ id, label: object.title, kind: "object" });
-    links.push({ from: "concept", to: id, strength: "secondary" });
+    addLink({ from: "concept", to: id, strength: "secondary" });
   }
   return { nodes, links };
 }
@@ -372,31 +355,6 @@ function summarizeInvestigation(
   const sourceCount = new Set(direct.map((item) => item.sourceFile)).size;
   const objectCount = objects.length;
   return `${titleCase(query)} is being read through ${sourceCount} source index${sourceCount === 1 ? "" : "es"} and ${objectCount} connected object record${objectCount === 1 ? "" : "s"}. The investigation favors cited passages and archival adjacency over generated prose.`;
-}
-
-function sourceTypeFromPath(path: string) {
-  if (path.includes("Books")) return "book";
-  if (path.includes("Papers")) return "paper";
-  if (path.includes("Articles")) return "article";
-  if (path.includes("Quotes")) return "quote";
-  if (path.includes("Claims")) return "claim";
-  return "raw";
-}
-
-function parseType(block: string) {
-  return block.match(/^Type:\s*(.+)$/im)?.[1]?.trim();
-}
-
-function parsePage(block: string) {
-  return block.match(/\bp(?:age|\.)?\s*(\d+)/i)?.[1] ?? "index";
-}
-
-function normalizePassage(block: string) {
-  return block
-    .replace(/^##\s.+$/gm, "")
-    .replace(/^Type:\s*.+$/gim, "")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim();
 }
 
 function excerptFor(text: string, terms: string[]) {

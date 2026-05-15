@@ -1,4 +1,5 @@
 import { readBookFile, writeBinaryBookFile, writeBookFile } from "./files";
+import { refreshStudySourceIndex } from "@/lib/study/source-index";
 import type { StorageProvider } from "@/lib/storage/types";
 
 export type SourceKind =
@@ -70,6 +71,7 @@ export async function appendSource(
       rawEntry,
     );
   }
+  await refreshStudySourceIndex(storage, bookId, date);
 
   return {
     path: SOURCE_TARGETS.raw,
