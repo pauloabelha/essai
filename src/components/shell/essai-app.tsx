@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import type { Dispatch, RefObject, SetStateAction } from "react";
+import type { CSSProperties, Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Archive,
@@ -10,6 +10,7 @@ import {
   ChevronDown,
   FilePlus,
   FolderPlus,
+  GitBranch,
   Maximize2,
   Moon,
   Plus,
@@ -37,7 +38,7 @@ const MarkdownEditor = dynamic(
 );
 
 type SaveState = "saved" | "dirty" | "saving";
-type ViewMode = "write" | "preview" | "read";
+type ViewMode = "write" | "preview" | "read" | "study";
 
 interface LoadedFile {
   path: string;
@@ -47,6 +48,46 @@ interface LoadedFile {
     backlinks: Array<{ path: string }>;
     broken: Array<{ target: string; raw: string }>;
   };
+}
+
+interface StudyInvestigation {
+  query: string;
+  title: string;
+  summary: string;
+  relatedConcepts: string[];
+  sourceCoverage: {
+    sources: number;
+    chunks: number;
+    pdfs: number;
+    scope: string;
+  };
+  directReferences: StudyPassage[];
+  conceptualEchoes: string[];
+  claims: StudyPassage[];
+  relatedObjects: Array<{ path: string; title: string; excerpt: string }>;
+  graph: {
+    nodes: Array<{
+      id: string;
+      label: string;
+      kind: "concept" | "source" | "claim" | "object";
+    }>;
+    links: Array<{
+      from: string;
+      to: string;
+      strength: "primary" | "secondary";
+    }>;
+  };
+  auditLog: string[];
+}
+
+interface StudyPassage {
+  id: string;
+  quote: string;
+  sourceFile: string;
+  sourceType: string;
+  page: string;
+  confidence: "High" | "Medium" | "Low";
+  retrievalMethod: string;
 }
 
 export function EssaiApp({
@@ -81,6 +122,11 @@ export function EssaiApp({
   const [pdfKind, setPdfKind] = useState<SourceKind>("paper");
   const [captureStatus, setCaptureStatus] = useState("");
   const [notesCount, setNotesCount] = useState(0);
+  const [studyQuery, setStudyQuery] = useState("programmable machines");
+  const [studyExhaustive, setStudyExhaustive] = useState(true);
+  const [studyInvestigation, setStudyInvestigation] =
+    useState<StudyInvestigation | null>(null);
+  const [studyLoading, setStudyLoading] = useState(false);
   const noteInputRef = useRef<HTMLTextAreaElement | null>(null);
   const pdfInputRef = useRef<HTMLInputElement | null>(null);
   const { theme, setTheme } = useTheme();
@@ -221,6 +267,12 @@ export function EssaiApp({
   const hasCurrentNotes = allFiles.some((file) =>
     file.path.endsWith("/notes.md"),
   );
+  const archiveFiles = allFiles
+    .map((file) => cleanProjectPath(file.path, bookId))
+    .filter((path) => path.startsWith("sources/"));
+  const objectFiles = allFiles
+    .map((file) => cleanProjectPath(file.path, bookId))
+    .filter((path) => path.startsWith("objects/") && path.endsWith(".md"));
 
   useEffect(() => {
     if (!bookId || !hasCurrentNotes) {
@@ -233,6 +285,34 @@ export function EssaiApp({
         if (file) setNotesCount(countNoteBlocks(file.content));
       });
   }, [bookId, hasCurrentNotes, files]);
+
+  useEffect(() => {
+    if (!bookId || viewMode !== "study") return;
+    const controller = new AbortController();
+    const handle = window.setTimeout(async () => {
+      setStudyLoading(true);
+      try {
+        const params = new URLSearchParams({
+          q: studyQuery,
+          mode: studyExhaustive ? "exhaustive" : "fast",
+        });
+        const response = await fetch(`/api/books/${bookId}/study?${params}`, {
+          signal: controller.signal,
+        });
+        if (response.ok) {
+          setStudyInvestigation((await response.json()) as StudyInvestigation);
+        }
+      } catch {
+        // Typing a new inquiry cancels the previous archival pass.
+      } finally {
+        if (!controller.signal.aborted) setStudyLoading(false);
+      }
+    }, 220);
+    return () => {
+      controller.abort();
+      window.clearTimeout(handle);
+    };
+  }, [bookId, files, studyExhaustive, studyQuery, viewMode]);
 
   async function createNewBook(titleFromForm?: string) {
     const title = titleFromForm || window.prompt("Book title");
@@ -421,12 +501,28 @@ export function EssaiApp({
       className={[
         "app-frame",
         viewMode === "read" ? "reading-active" : "",
+        viewMode === "study" ? "study-active" : "",
         focusMode ? "focus-active" : "",
       ]
         .filter(Boolean)
         .join(" ")}
     >
-      {viewMode !== "read" && !focusMode ? (
+      {viewMode === "study" && !focusMode ? (
+        <StudySidebar
+          archiveFiles={archiveFiles}
+          objectFiles={objectFiles}
+          notesCount={notesCount}
+          investigation={studyInvestigation}
+          onOpenFile={(path) => {
+            setViewMode("preview");
+            loadFile(path);
+          }}
+          onStudyConcept={(concept) => {
+            setStudyQuery(concept);
+            setViewMode("study");
+          }}
+        />
+      ) : viewMode !== "read" && !focusMode ? (
         <aside className="left-pane" aria-label="Files">
           <div className="brand-row">
             <div>
@@ -518,13 +614,17 @@ export function EssaiApp({
         <header className="topbar">
           <div>
             <strong>{activeBook?.title}</strong>
-            <span>{openPath}</span>
+            <span>{viewMode === "study" ? "sources archive" : openPath}</span>
           </div>
           <div className="toolbar">
-            <span className={`save-state ${saveState}`}>{saveState}</span>
-            <button title="Save" onClick={saveFile}>
-              <Save size={16} />
-            </button>
+            {viewMode !== "study" ? (
+              <>
+                <span className={`save-state ${saveState}`}>{saveState}</span>
+                <button title="Save" onClick={saveFile}>
+                  <Save size={16} />
+                </button>
+              </>
+            ) : null}
             <div className="mode-switch" aria-label="Writing mode">
               <button
                 className={viewMode === "write" ? "active" : ""}
@@ -545,6 +645,14 @@ export function EssaiApp({
                 onClick={() => setViewMode("read")}
               >
                 Read
+              </button>
+              <button
+                className={
+                  viewMode === "study" ? "active study-mode" : "study-mode"
+                }
+                onClick={() => setViewMode("study")}
+              >
+                Study
               </button>
             </div>
             {viewMode === "preview" ? (
@@ -580,6 +688,20 @@ export function EssaiApp({
 
         {viewMode === "read" ? (
           <MarkdownView markdown={draft} reading onWikiClick={openWikiTarget} />
+        ) : viewMode === "study" ? (
+          <StudySurface
+            query={studyQuery}
+            exhaustive={studyExhaustive}
+            loading={studyLoading}
+            investigation={studyInvestigation}
+            onQueryChange={setStudyQuery}
+            onExhaustiveChange={setStudyExhaustive}
+            onOpenFile={(path) => {
+              setViewMode("preview");
+              loadFile(path);
+            }}
+            onStudyConcept={setStudyQuery}
+          />
         ) : (
           <div
             className={`workspace mode-${viewMode} ${splitPreview ? "with-split" : ""}`}
@@ -594,7 +716,7 @@ export function EssaiApp({
         )}
       </section>
 
-      {viewMode !== "read" && !focusMode ? (
+      {viewMode !== "read" && viewMode !== "study" && !focusMode ? (
         <aside className="right-pane" aria-label="Input">
           <InputPane
             noteValue={noteInput}
@@ -620,7 +742,7 @@ export function EssaiApp({
         </aside>
       ) : null}
 
-      {viewMode !== "read" ? (
+      {viewMode !== "read" && viewMode !== "study" ? (
         <button className="floating-notes" onClick={focusNotes}>
           <Plus size={18} /> Notes
         </button>
@@ -649,6 +771,7 @@ export function EssaiApp({
             if (command === "read") setViewMode("read");
             if (command === "write") setViewMode("write");
             if (command === "preview") setViewMode("preview");
+            if (command === "study") setViewMode("study");
             if (command === "focus") setFocusMode((value) => !value);
             if (command === "focus-notes") focusNotes();
             if (command === "open-notes") openCurrentNotes();
@@ -829,6 +952,313 @@ function InputPane({
   );
 }
 
+function StudySidebar({
+  archiveFiles,
+  objectFiles,
+  notesCount,
+  investigation,
+  onOpenFile,
+  onStudyConcept,
+}: {
+  archiveFiles: string[];
+  objectFiles: string[];
+  notesCount: number;
+  investigation: StudyInvestigation | null;
+  onOpenFile: (path: string) => void;
+  onStudyConcept: (concept: string) => void;
+}) {
+  const sourceCounts = {
+    Books: archiveFiles.filter((path) => path.includes("Books.md")).length,
+    Papers: archiveFiles.filter((path) => path.includes("Papers.md")).length,
+    Articles: archiveFiles.filter((path) => path.includes("Articles.md"))
+      .length,
+    Quotes: archiveFiles.filter((path) => path.includes("Quotes.md")).length,
+    Claims: archiveFiles.filter((path) => path.includes("Claims.md")).length,
+    "Uploaded PDFs": archiveFiles.filter((path) =>
+      path.toLowerCase().endsWith(".pdf"),
+    ).length,
+  };
+  return (
+    <aside className="study-sidebar" aria-label="Study archive">
+      <div>
+        <p className="eyebrow">Study</p>
+        <h2>Semantic Archive</h2>
+      </div>
+      <nav className="study-nav" aria-label="Archive navigation">
+        {["Sources", "Concepts", "Objects", "Claims", "Notes"].map((item) => (
+          <button key={item}>{item}</button>
+        ))}
+        <button>Semantic bookmarks</button>
+        <button>Recent investigations</button>
+      </nav>
+      <section className="study-sidebar-section">
+        <h3>Filters</h3>
+        {Object.entries(sourceCounts).map(([label, count]) => (
+          <button key={label} onClick={() => onOpenFile(sourcePathFor(label))}>
+            <span>{label}</span>
+            <strong>{count}</strong>
+          </button>
+        ))}
+      </section>
+      <section className="study-sidebar-section">
+        <h3>Objects</h3>
+        {objectFiles.slice(0, 7).map((path) => (
+          <button key={path} onClick={() => onOpenFile(path)}>
+            {path.replace(/^objects\//, "")}
+          </button>
+        ))}
+      </section>
+      <section className="study-sidebar-section">
+        <h3>Notes</h3>
+        <button onClick={() => onOpenFile("notes.md")}>
+          <span>Captured notes</span>
+          <strong>{notesCount}</strong>
+        </button>
+      </section>
+      {investigation?.conceptualEchoes.length ? (
+        <section className="study-sidebar-section">
+          <h3>Recent Inquiry</h3>
+          {investigation.conceptualEchoes.slice(0, 5).map((echo) => (
+            <button key={echo} onClick={() => onStudyConcept(echo)}>
+              {echo}
+            </button>
+          ))}
+        </section>
+      ) : null}
+    </aside>
+  );
+}
+
+function StudySurface({
+  query,
+  exhaustive,
+  loading,
+  investigation,
+  onQueryChange,
+  onExhaustiveChange,
+  onOpenFile,
+  onStudyConcept,
+}: {
+  query: string;
+  exhaustive: boolean;
+  loading: boolean;
+  investigation: StudyInvestigation | null;
+  onQueryChange: (value: string) => void;
+  onExhaustiveChange: (value: boolean) => void;
+  onOpenFile: (path: string) => void;
+  onStudyConcept: (concept: string) => void;
+}) {
+  return (
+    <div className="study-surface">
+      <section className="study-inquiry">
+        <label>
+          <span>Concept investigation</span>
+          <input
+            value={query}
+            onChange={(event) => onQueryChange(event.target.value)}
+            aria-label="Study concept"
+          />
+        </label>
+        <div className="study-audit-toggle" aria-label="Retrieval depth">
+          <label>
+            <input
+              type="checkbox"
+              checked={!exhaustive}
+              onChange={() => onExhaustiveChange(false)}
+            />
+            <span>Fast Semantic Search</span>
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={exhaustive}
+              onChange={() => onExhaustiveChange(true)}
+            />
+            <span>Exhaustive Scholarly Audit</span>
+          </label>
+        </div>
+      </section>
+
+      <article className="study-scroll" aria-busy={loading}>
+        <header className="concept-header">
+          <p className="eyebrow">Concept</p>
+          <h1>{investigation?.title ?? titleCase(query)}</h1>
+          <p>{investigation?.summary ?? "Reading the source archive."}</p>
+          <div className="concept-meta">
+            <span>
+              {investigation?.sourceCoverage.sources ?? 0} source indexes
+            </span>
+            <span>{investigation?.sourceCoverage.chunks ?? 0} chunks</span>
+            <span>{investigation?.sourceCoverage.pdfs ?? 0} PDFs</span>
+            <span>
+              {investigation?.sourceCoverage.scope ?? "Preparing audit"}
+            </span>
+          </div>
+          <div className="concept-tags">
+            {(investigation?.relatedConcepts ?? []).map((concept) => (
+              <button key={concept} onClick={() => onStudyConcept(concept)}>
+                {concept}
+              </button>
+            ))}
+          </div>
+        </header>
+
+        {loading ? (
+          <p className="study-loading">Accumulating source evidence.</p>
+        ) : null}
+
+        <StudyPassageSection
+          title="Direct References"
+          passages={investigation?.directReferences ?? []}
+          empty="No high-confidence passages yet."
+          onOpenFile={onOpenFile}
+        />
+
+        <section className="study-section">
+          <h2>Conceptual Echoes</h2>
+          <div className="echo-list">
+            {(investigation?.conceptualEchoes ?? []).map((echo) => (
+              <button key={echo} onClick={() => onStudyConcept(echo)}>
+                {echo}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        <StudyPassageSection
+          title="Claims"
+          passages={investigation?.claims ?? []}
+          empty="No related claims have been indexed in sources/Claims.md."
+          onOpenFile={onOpenFile}
+        />
+
+        <section className="study-section">
+          <h2>Related Objects</h2>
+          <div className="object-ledger">
+            {(investigation?.relatedObjects ?? []).length ? (
+              investigation?.relatedObjects.map((object) => (
+                <button
+                  key={object.path}
+                  onClick={() => onOpenFile(object.path)}
+                >
+                  <strong>{object.title}</strong>
+                  <span>{object.path}</span>
+                  <p>{object.excerpt}</p>
+                </button>
+              ))
+            ) : (
+              <p className="muted">No object records connected yet.</p>
+            )}
+          </div>
+        </section>
+
+        <section className="study-section">
+          <h2>Source Graph</h2>
+          <StudyGraph investigation={investigation} />
+        </section>
+
+        <section className="study-section audit-log">
+          <h2>Coverage Log</h2>
+          {(investigation?.auditLog ?? []).map((entry) => (
+            <p key={entry}>{entry}</p>
+          ))}
+        </section>
+      </article>
+    </div>
+  );
+}
+
+function StudyPassageSection({
+  title,
+  passages,
+  empty,
+  onOpenFile,
+}: {
+  title: string;
+  passages: StudyPassage[];
+  empty: string;
+  onOpenFile: (path: string) => void;
+}) {
+  return (
+    <section className="study-section">
+      <h2>{title}</h2>
+      <div className="passage-ledger">
+        {passages.length ? (
+          passages.map((passage) => (
+            <button
+              key={passage.id}
+              onClick={() => onOpenFile(passage.sourceFile)}
+            >
+              <blockquote>{passage.quote}</blockquote>
+              <dl>
+                <div>
+                  <dt>Source</dt>
+                  <dd>{passage.sourceFile}</dd>
+                </div>
+                <div>
+                  <dt>Type</dt>
+                  <dd>{passage.sourceType}</dd>
+                </div>
+                <div>
+                  <dt>Page</dt>
+                  <dd>{passage.page}</dd>
+                </div>
+                <div>
+                  <dt>Confidence</dt>
+                  <dd>{passage.confidence}</dd>
+                </div>
+                <div>
+                  <dt>Retrieval</dt>
+                  <dd>{passage.retrievalMethod}</dd>
+                </div>
+              </dl>
+            </button>
+          ))
+        ) : (
+          <p className="muted">{empty}</p>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function StudyGraph({
+  investigation,
+}: {
+  investigation: StudyInvestigation | null;
+}) {
+  if (!investigation?.graph.nodes.length) {
+    return <p className="muted">The graph will appear as sources connect.</p>;
+  }
+  return (
+    <div className="source-graph">
+      {investigation.graph.nodes.map((node, index) => (
+        <div
+          key={node.id}
+          className={`graph-node ${node.kind}`}
+          style={{ "--graph-index": index } as CSSProperties}
+        >
+          <GitBranch size={14} />
+          <span>{node.label}</span>
+        </div>
+      ))}
+      <div className="graph-relations">
+        {investigation.graph.links.slice(0, 9).map((link) => (
+          <span
+            key={`${link.from}-${link.to}`}
+            className={link.strength}
+            style={
+              {
+                "--graph-link-index": investigation.graph.links.indexOf(link),
+              } as CSSProperties
+            }
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function CommandPalette({
   files,
   onClose,
@@ -843,6 +1273,7 @@ function CommandPalette({
     ["write", "Write mode"],
     ["preview", "Preview mode"],
     ["read", "Read mode"],
+    ["study", "Study mode"],
     ["save", "Save"],
     ["focus-notes", "Focus Notes"],
     ["open-notes", "Open Notes"],
@@ -974,6 +1405,28 @@ function cleanProjectPath(path: string, bookId?: string) {
     ? new RegExp(`^projects/${bookId}/`)
     : /^projects\/[^/]+\//;
   return path.replace(scoped, "");
+}
+
+function sourcePathFor(label: string) {
+  return (
+    {
+      Books: "sources/Books.md",
+      Papers: "sources/Papers.md",
+      Articles: "sources/Articles.md",
+      Quotes: "sources/Quotes.md",
+      Claims: "sources/Claims.md",
+      "Uploaded PDFs": "sources/raw.md",
+    }[label] ?? "sources/raw.md"
+  );
+}
+
+function titleCase(value: string) {
+  return value
+    .replace(/[-_]+/g, " ")
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
+    .join(" ");
 }
 
 function insertSnippet(

@@ -65,6 +65,10 @@ button {
   grid-template-columns: minmax(0, 1fr);
 }
 
+.app-frame.study-active {
+  grid-template-columns: 268px minmax(0, 1fr);
+}
+
 .left-pane,
 .right-pane {
   min-height: 0;
@@ -285,6 +289,10 @@ summary {
 }
 
 .mode-switch .read-mode {
+  font-weight: 650;
+}
+
+.mode-switch .study-mode {
   font-weight: 650;
 }
 
@@ -701,6 +709,357 @@ summary {
   display: none;
 }
 
+.study-sidebar {
+  min-height: 0;
+  overflow: auto;
+  border-right: 1px solid var(--rule);
+  background: color-mix(in srgb, var(--surface) 84%, var(--paper));
+  padding: 18px 16px;
+}
+
+.study-sidebar h2 {
+  margin: 0 0 20px;
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 25px;
+  line-height: 1.08;
+  font-weight: 560;
+}
+
+.study-nav,
+.study-sidebar-section {
+  display: grid;
+  gap: 4px;
+  border-top: 1px solid var(--rule);
+  padding-top: 14px;
+  margin-top: 14px;
+}
+
+.study-nav button,
+.study-sidebar-section button {
+  width: 100%;
+  justify-content: space-between;
+  border-color: transparent;
+  background: transparent;
+  text-align: left;
+  color: color-mix(in srgb, var(--ink) 82%, var(--muted));
+}
+
+.study-nav button:hover,
+.study-sidebar-section button:hover {
+  background: color-mix(in srgb, var(--accent) 6%, transparent);
+}
+
+.study-sidebar-section h3,
+.study-section h2 {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.study-sidebar-section strong {
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 650;
+}
+
+.study-surface {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background:
+    linear-gradient(
+        to right,
+        color-mix(in srgb, var(--rule) 46%, transparent) 1px,
+        transparent 1px
+      )
+      0 0 / 72px 72px,
+    var(--surface);
+}
+
+.study-inquiry {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) auto;
+  gap: 18px;
+  align-items: end;
+  border-bottom: 1px solid var(--rule);
+  background: color-mix(in srgb, var(--surface) 94%, var(--paper));
+  padding: 18px clamp(20px, 4vw, 52px);
+}
+
+.study-inquiry label {
+  display: grid;
+  gap: 7px;
+}
+
+.study-inquiry label span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.study-inquiry input[aria-label="Study concept"] {
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  padding: 8px 0 10px;
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 27px;
+  line-height: 1.1;
+}
+
+.study-audit-toggle {
+  display: grid;
+  gap: 6px;
+  min-width: 245px;
+}
+
+.study-audit-toggle label {
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.study-audit-toggle input {
+  width: 15px;
+  height: 15px;
+  accent-color: var(--accent);
+}
+
+.study-scroll {
+  overflow: auto;
+  padding: 42px clamp(22px, 6vw, 92px) 70px;
+}
+
+.concept-header {
+  max-width: 980px;
+  border-bottom: 1px solid var(--rule);
+  padding-bottom: 26px;
+  margin-bottom: 32px;
+}
+
+.concept-header h1 {
+  margin: 0 0 14px;
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: clamp(46px, 7vw, 92px);
+  line-height: 0.96;
+  font-weight: 540;
+}
+
+.concept-header p {
+  max-width: 760px;
+  color: color-mix(in srgb, var(--ink) 78%, var(--muted));
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 21px;
+  line-height: 1.58;
+}
+
+.concept-meta,
+.concept-tags,
+.echo-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.concept-meta {
+  margin-top: 18px;
+}
+
+.concept-meta span {
+  border-left: 1px solid var(--rule);
+  padding-left: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.concept-meta span:first-child {
+  border-left: 0;
+  padding-left: 0;
+}
+
+.concept-tags {
+  margin-top: 20px;
+}
+
+.concept-tags button,
+.echo-list button {
+  border-color: color-mix(in srgb, var(--accent) 24%, var(--rule));
+  background: color-mix(in srgb, var(--surface) 82%, var(--paper));
+  color: color-mix(in srgb, var(--accent) 80%, var(--ink));
+  font-size: 13px;
+}
+
+.study-loading {
+  margin: -14px 0 22px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.study-section {
+  max-width: 1040px;
+  border-top: 1px solid var(--rule);
+  padding-top: 22px;
+  margin-top: 28px;
+}
+
+.passage-ledger,
+.object-ledger {
+  display: grid;
+}
+
+.passage-ledger button,
+.object-ledger button {
+  display: grid;
+  justify-content: stretch;
+  width: 100%;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  background: transparent;
+  padding: 18px 0;
+  text-align: left;
+}
+
+.passage-ledger button:hover,
+.object-ledger button:hover {
+  background: color-mix(in srgb, var(--accent) 4%, transparent);
+}
+
+.passage-ledger blockquote {
+  margin: 0 0 14px;
+  max-width: 780px;
+  color: var(--ink);
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 20px;
+  line-height: 1.6;
+}
+
+.passage-ledger dl {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(90px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.passage-ledger dt {
+  color: var(--muted);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.passage-ledger dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+  color: color-mix(in srgb, var(--ink) 78%, var(--muted));
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.object-ledger strong,
+.object-ledger span,
+.object-ledger p {
+  display: block;
+}
+
+.object-ledger strong {
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 21px;
+  font-weight: 560;
+}
+
+.object-ledger span {
+  margin-top: 3px;
+  color: var(--accent);
+  font-size: 12px;
+}
+
+.object-ledger p {
+  max-width: 720px;
+  margin: 9px 0 0;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.source-graph {
+  position: relative;
+  min-height: 270px;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  overflow: hidden;
+  background:
+    linear-gradient(var(--rule) 1px, transparent 1px) 0 0 / 42px 42px,
+    linear-gradient(90deg, var(--rule) 1px, transparent 1px) 0 0 / 42px 42px,
+    color-mix(in srgb, var(--surface) 82%, var(--paper));
+}
+
+.graph-node {
+  position: absolute;
+  left: calc(9% + (var(--graph-index) % 3) * 28%);
+  top: calc(18% + (var(--graph-index) % 4) * 17%);
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  max-width: 210px;
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--paper));
+  padding: 8px 10px;
+  box-shadow: 0 10px 24px rgb(58 43 27 / 0.07);
+  color: color-mix(in srgb, var(--ink) 84%, var(--muted));
+  font-size: 12px;
+}
+
+.graph-node.concept {
+  left: 8%;
+  top: 42%;
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--rule));
+  color: var(--accent);
+}
+
+.graph-node span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.graph-relations {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.graph-relations span {
+  position: absolute;
+  left: 18%;
+  top: calc(22% + (var(--graph-link-index, 0) * 10%));
+  width: 54%;
+  height: 1px;
+  background: color-mix(in srgb, var(--muted) 34%, transparent);
+  transform: rotate(calc(-12deg + var(--graph-link-index, 0) * 5deg));
+  transform-origin: left center;
+}
+
+.graph-relations span.primary {
+  background: color-mix(in srgb, var(--accent) 42%, transparent);
+}
+
+.audit-log p {
+  margin: 0;
+  border-bottom: 1px solid var(--rule);
+  padding: 9px 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+
 .empty-state {
   min-height: 100vh;
   display: grid;
@@ -855,6 +1214,10 @@ summary {
     grid-template-columns: 220px minmax(0, 1fr);
   }
 
+  .app-frame.study-active {
+    grid-template-columns: 230px minmax(0, 1fr);
+  }
+
   .right-pane {
     display: none;
   }
@@ -873,8 +1236,25 @@ summary {
     grid-template-columns: 1fr;
   }
 
-  .left-pane {
+  .app-frame.study-active {
+    grid-template-columns: 1fr;
+  }
+
+  .left-pane,
+  .study-sidebar {
     display: none;
+  }
+
+  .study-inquiry {
+    grid-template-columns: 1fr;
+  }
+
+  .study-audit-toggle {
+    min-width: 0;
+  }
+
+  .passage-ledger dl {
+    grid-template-columns: 1fr 1fr;
   }
 
   .toolbar {

@@ -26,6 +26,19 @@ test("create project, capture notes and sources, write, focus, read, and navigat
   await page.getByLabel("Source type", { exact: true }).selectOption("paper");
   await page.getByRole("button", { name: "Commit Source" }).click();
   await expect(page.getByText("Source saved as paper.")).toBeVisible();
+  await page.getByRole("button", { name: "Study" }).click();
+  await page.getByLabel("Study concept").fill("example source");
+  await expect(page.locator(".app-frame")).toHaveClass(/study-active/);
+  await expect(
+    page.getByRole("heading", { name: "Direct References" }),
+  ).toBeVisible();
+  const directReferences = page.locator(".study-section").filter({
+    has: page.getByRole("heading", { name: "Direct References" }),
+  });
+  await expect(directReferences).toContainText("https://example.com/source", {
+    timeout: 10_000,
+  });
+  await page.getByRole("button", { name: "Write" }).click();
   await page.getByLabel("PDF source file").setInputFiles({
     name: "sample-book.pdf",
     mimeType: "application/pdf",

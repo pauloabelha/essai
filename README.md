@@ -16,13 +16,33 @@ The aim is restraint: readable typography, durable files, fast navigation, and a
 
 Essai opens in **Write** mode: one central Markdown editor, no permanent preview, and as much calm space as possible for drafting.
 
-The three modes are:
+The four modes are:
 
 - **Write**: the default writing desk. Editor only.
 - **Preview**: rendered Markdown for checking structure and links. A split preview can be toggled when needed.
 - **Read**: immersive, magazine-style reading with sidebars and editing chrome hidden.
+- **Study**: a separate semantic archive room for investigating concepts, claims, sources, notes, and objects without editing the manuscript.
 
 Focus mode hides both sidebars when the page needs to become only the text.
+
+## Study Mode
+
+Study mode treats the project’s `sources/` directory as the semantic archive layer of the book. It is not a chatbot, an AI sidebar, or a writing assistant. It is a calm research surface for asking what the archive can support.
+
+The Study room is built around:
+
+- **Archive navigation**: sources, concepts, objects, claims, notes, semantic bookmarks, and recent investigations.
+- **Concept investigation**: a central, non-editor surface organized around a concept such as `programmable machines`.
+- **Direct references**: source-grounded passages with visible file provenance, source type, page marker, confidence, and retrieval method.
+- **Conceptual echoes**: adjacent ideas that may deserve exploration.
+- **Claims**: claim records drawn from `sources/Claims.md`.
+- **Related objects**: artifact records drawn from `objects/`.
+- **Source graph**: a restrained relationship map between concepts, source files, claims, and object notes.
+- **Coverage log**: an audit trail of what was read from the archive.
+
+The first implementation uses local source indexes and a hybrid lexical/semantic-neighbor retrieval scaffold. It is designed so future embeddings, BM25, reranking, and GPT adjudication can be added behind the same provenance-first interface.
+
+Study mode never writes to `main.md`. Its summaries and pathways are only interpretive views over auxiliary project files.
 
 ## Notes And Sources Capture
 
@@ -91,11 +111,13 @@ The stored filename is timestamped and sanitized so source folders stay git-frie
 - Next.js App Router with TypeScript.
 - React Server Components for initial book loading.
 - Route Handlers under `src/app/api` for book and file operations.
+- Study archive route under `src/app/api/books/[bookId]/study`.
 - CodeMirror 6 for Markdown editing.
 - Markdown files as the primary data model.
 - A storage abstraction in `src/lib/storage`.
 - Binary storage methods for uploaded source files.
 - Wiki-link, backlink, broken-link, and search logic in `src/lib`.
+- Source-grounded Study retrieval logic in `src/lib/study`.
 - Vitest unit tests and Playwright end-to-end tests.
 
 The storage contract is:
@@ -220,6 +242,7 @@ The test suite covers:
 - PDF source storage, sanitization, and Markdown indexing
 - binary storage list/read/rename/delete behavior
 - write/preview/read mode switching
+- study mode archive investigation from `sources/`
 - focus mode
 - end-to-end note, text source, and PDF source capture
 
