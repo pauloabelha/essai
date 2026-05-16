@@ -70,13 +70,13 @@ If the file does not exist, Essai creates it. Each capture is appended as:
 
 Older projects may still contain legacy inbox files. Essai keeps those files readable and does not delete them. New projects prefer `notes.md`.
 
-The **Source** panel accepts links, citations, quotes, raw references, and files. Press **Commit** to append a text source to:
+The **Source** panel has one capture box for links, citations, quotes, raw references, and files. Paste text into it or drop a file directly into the same box. Press **Commit** to append a text source to:
 
 ```txt
 sources/raw.md
 ```
 
-Source files can be uploaded from the same Source panel by choosing a file or dropping it onto the file target. Dropped files are archived immediately and refresh the Study index; chosen files are archived when **Upload File** is pressed. The interface archives new uploads as raw source files under:
+Files can also be chosen from inside that same source box. Dropped files are archived immediately and refresh the Study index; chosen files are archived when **Upload File** is pressed. The interface archives new uploads as raw source files under:
 
 ```txt
 sources/files/raw/
@@ -100,13 +100,13 @@ Uploaded source file.
 
 The stored filename is timestamped and sanitized so source folders stay git-friendly. Empty files are rejected before any Markdown index is changed.
 
-Every text source capture and uploaded source file also refreshes:
+Every text source capture and uploaded source file also refreshes a backend search index:
 
 ```txt
 sources/.study-index.json
 ```
 
-This generated Study index contains source chunks and uploaded-file metadata used by Study search. It can be regenerated from the readable Markdown ledgers and archived files.
+This generated Study index contains normalized `documents` and `chunks` used by Study search. Text-like uploads such as `.txt`, `.md`, `.csv`, `.json`, and `.xml` have their UTF-8 text extracted into searchable chunks. Binary formats such as PDFs are still represented with stable path, title, size, MIME type, source kind, and metadata-only search text until a richer extractor is added. The shape is intentionally suitable for later Elasticsearch, SQLite FTS, embedding, or reranking ingestion, and it can be regenerated from the readable Markdown ledgers and archived files.
 
 ## Architecture
 
@@ -200,7 +200,7 @@ Text sources and uploaded source files are deliberately handled as archive opera
 - Typed files such as `sources/Papers.md` and `sources/Books.md` may exist for legacy or API-driven classification, but the primary interface now commits uncategorized source captures to `sources/raw.md`.
 - Uploaded files from the interface live under `sources/files/raw/`.
 - Markdown indexes link to uploaded files with relative links, so the project folder remains portable.
-- `sources/.study-index.json` is refreshed after every source capture or file upload so Study search can use the latest archive state.
+- `sources/.study-index.json` is refreshed after every source capture or file upload so Study search and future search backends can use the latest archive state.
 - AI may later classify or summarize sources, but it must not alter `main.md` without an explicit human action.
 
 ## Setup

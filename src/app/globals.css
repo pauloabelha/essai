@@ -511,9 +511,9 @@ summary {
 }
 
 .input-pane {
-  min-height: 100%;
+  min-height: 0;
   display: grid;
-  grid-template-rows: minmax(250px, 0.95fr) minmax(330px, 1.05fr);
+  grid-template-rows: auto auto;
   align-content: start;
   gap: 18px;
 }
@@ -529,7 +529,7 @@ summary {
 .notes-capture-box {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-rows: auto minmax(190px, 28vh) auto auto;
   gap: 8px;
 }
 
@@ -564,19 +564,35 @@ summary {
 .source-capture-box {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(96px, 0.7fr) auto minmax(74px, 0.55fr) auto;
+  grid-template-rows: auto minmax(158px, 22vh) auto auto;
   gap: 10px;
   border-top: 1px solid var(--rule);
   padding-top: 18px;
 }
 
-.source-capture-box textarea {
+.source-capture-target {
   width: 100%;
   min-height: 0;
-  resize: vertical;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
   border: 1px solid var(--rule);
   border-radius: 7px;
   background: var(--surface);
+  overflow: hidden;
+}
+
+.source-capture-target:focus-within {
+  border-color: color-mix(in srgb, var(--accent) 46%, var(--rule));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.source-capture-target textarea {
+  width: 100%;
+  min-height: 0;
+  resize: none;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   color: var(--ink);
   padding: 12px;
   font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
@@ -585,9 +601,41 @@ summary {
   outline: none;
 }
 
-.source-capture-box textarea:focus {
-  border-color: color-mix(in srgb, var(--accent) 46%, var(--rule));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+.source-file-row {
+  position: relative;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  border-top: 1px dashed color-mix(in srgb, var(--muted) 36%, var(--rule));
+  padding: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.source-file-row input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.source-file-row span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.source-file-row button {
+  width: auto;
+  border-color: color-mix(in srgb, var(--muted) 20%, var(--rule));
+  background: color-mix(in srgb, var(--surface) 78%, var(--paper));
+  color: color-mix(in srgb, var(--ink) 76%, var(--muted));
+  font-size: 12px;
+  padding: 6px 9px;
 }
 
 .source-actions {
@@ -604,42 +652,6 @@ summary {
 
 .pdf-upload-actions button {
   justify-content: center;
-}
-
-.source-file-dropzone {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 100%;
-  border: 1px dashed color-mix(in srgb, var(--muted) 45%, var(--rule));
-  border-radius: 7px;
-  background: var(--surface);
-  color: var(--muted);
-  min-height: 82px;
-  padding: 14px;
-  font-size: 13px;
-  line-height: 1.4;
-  text-align: center;
-  cursor: pointer;
-}
-
-.source-file-dropzone:hover,
-.source-file-dropzone:focus-within {
-  border-color: color-mix(in srgb, var(--accent) 46%, var(--rule));
-  background: color-mix(in srgb, var(--accent) 4%, var(--surface));
-}
-
-.source-file-dropzone input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.source-file-dropzone span {
-  max-width: 100%;
-  overflow-wrap: anywhere;
 }
 
 .pdf-upload-actions button:disabled {

@@ -108,7 +108,7 @@ describe("project creation", () => {
     ).toContain("https://example.com/paper");
   });
 
-  it("stores uploaded source files in typed source folders and indexes them", async () => {
+  it("stores uploaded source files and indexes extracted text", async () => {
     const storage = new InMemoryStorageProvider();
     await createBook(storage, "My Book");
     const result = await appendSourceFile(
@@ -116,7 +116,9 @@ describe("project creation", () => {
       "my-book",
       {
         name: "Important Notes.txt",
-        bytes: new Uint8Array([83, 111, 117, 114, 99, 101]),
+        bytes: new TextEncoder().encode(
+          "Source text about programmable machines.",
+        ),
       },
       "paper",
       new Date("2026-05-14T21:30:00Z"),
@@ -129,16 +131,39 @@ describe("project creation", () => {
       await storage.readBinaryFile?.(
         "projects/my-book/sources/files/paper/20260514-213000-Important-Notes.txt",
       ),
-    ).toEqual(new Uint8Array([83, 111, 117, 114, 99, 101]));
+    ).toEqual(new TextEncoder().encode("Source text about programmable machines."));
     expect(await storage.readFile("projects/my-book/sources/raw.md")).toContain(
       "[Important Notes.txt](files/paper/20260514-213000-Important-Notes.txt)",
     );
     expect(
       await storage.readFile("projects/my-book/sources/Papers.md"),
     ).toContain("Uploaded source file.");
-    expect(
+    const index = JSON.parse(
       await storage.readFile("projects/my-book/sources/.study-index.json"),
-    ).toContain("Important-Notes.txt");
+    ) as {
+      version: number;
+      documents: Array<{
+        path: string;
+        kind: string;
+        searchText: string;
+        metadata: Record<string, unknown>;
+      }>;
+      chunks: Array<{ documentId: string; text: string }>;
+    };
+    const uploadDocument = index.documents.find(
+      (document) => document.path === result.filePath,
+    );
+    expect(index.version).toBe(2);
+    expect(uploadDocument).toMatchObject({
+      kind: "upload",
+      searchText: "Source text about programmable machines.",
+      metadata: { extractedText: true, extraction: "utf8-text" },
+    });
+    expect(
+      index.chunks.some((chunk) =>
+        chunk.text.includes("programmable machines"),
+      ),
+    ).toBe(true);
   });
 
   it("rejects empty source file uploads before indexing them", async () => {

@@ -16,6 +16,17 @@ export async function readBookFile(
   return storage.readFile(bookFilePath(bookId, path));
 }
 
+export async function readBinaryBookFile(
+  storage: StorageProvider,
+  bookId: string,
+  path: string,
+) {
+  if (!storage.readBinaryFile) {
+    throw new Error("This storage provider does not support binary files.");
+  }
+  return storage.readBinaryFile(bookFilePath(bookId, path));
+}
+
 export async function writeBookFile(
   storage: StorageProvider,
   bookId: string,

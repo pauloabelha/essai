@@ -811,19 +811,8 @@ function InputPane({
       </section>
       <section className="source-capture-box">
         <p className="eyebrow">Source</p>
-        <textarea
-          aria-label="Sources input"
-          placeholder="Paste a link, citation, quote, or raw source."
-          value={sourceValue}
-          onChange={(event) => onSourceChange(event.target.value)}
-        />
-        <div className="source-actions">
-          <button className="primary-action" onClick={onSourceCommit}>
-            <Save size={15} /> Commit
-          </button>
-        </div>
-        <label
-          className="source-file-dropzone"
+        <div
+          className="source-capture-target"
           onDragOver={(event) => event.preventDefault()}
           onDrop={(event) => {
             event.preventDefault();
@@ -832,14 +821,30 @@ function InputPane({
             if (file) onPdfDrop(file);
           }}
         >
-          <input
-            ref={pdfInputRef}
-            aria-label="Source file"
-            type="file"
-            onChange={(event) => onPdfChange(event.target.files?.[0] ?? null)}
+          <textarea
+            aria-label="Sources input"
+            placeholder="Paste a link, citation, quote, or raw source. Drop a file here too."
+            value={sourceValue}
+            onChange={(event) => onSourceChange(event.target.value)}
           />
-          <span>{pdfFile ? pdfFile.name : "Drop a file or choose one"}</span>
-        </label>
+          <div className="source-file-row">
+            <input
+              ref={pdfInputRef}
+              aria-label="Source file"
+              type="file"
+              onChange={(event) => onPdfChange(event.target.files?.[0] ?? null)}
+            />
+            <span>{pdfFile ? pdfFile.name : "No file selected"}</span>
+            <button type="button" onClick={() => pdfInputRef.current?.click()}>
+              Choose File
+            </button>
+          </div>
+        </div>
+        <div className="source-actions">
+          <button className="primary-action" onClick={onSourceCommit}>
+            <Save size={15} /> Commit
+          </button>
+        </div>
         <div className="pdf-upload-actions">
           <button
             className="primary-action"
