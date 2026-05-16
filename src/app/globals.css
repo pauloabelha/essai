@@ -151,6 +151,11 @@ button {
   justify-content: center;
   gap: 7px;
   cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    box-shadow 160ms ease,
+    transform 160ms ease;
 }
 
 button:hover,
@@ -234,7 +239,7 @@ button:focus-visible {
 .section-row {
   width: 100%;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: 6px;
   border-color: transparent;
@@ -277,37 +282,6 @@ button:focus-visible {
   white-space: nowrap;
   color: var(--ink);
   font-size: 15px;
-}
-
-.section-rename-button {
-  width: 28px;
-  min-height: 28px;
-  justify-content: center;
-  border-color: transparent;
-  background: transparent;
-  color: var(--muted);
-  opacity: 0;
-}
-
-.section-row:hover .section-rename-button,
-.section-rename-button:focus-visible {
-  opacity: 1;
-}
-
-.section-rename-form {
-  grid-column: 1 / -1;
-}
-
-.section-rename-form input {
-  width: 100%;
-  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--rule));
-  border-radius: 5px;
-  background: var(--surface);
-  color: var(--ink);
-  padding: 7px 8px;
-  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
-  font-size: 15px;
-  outline: none;
 }
 
 .section-tree-children {
@@ -407,17 +381,6 @@ summary {
 
 .mode-switch .study-mode {
   font-weight: 650;
-}
-
-.save-state {
-  color: var(--muted);
-  font-size: 12px;
-  min-width: 44px;
-  text-align: right;
-}
-
-.save-state.dirty {
-  color: var(--accent);
 }
 
 .workspace {
@@ -549,9 +512,10 @@ summary {
 
 .input-pane {
   min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
+  display: grid;
+  grid-template-rows: minmax(250px, 0.95fr) minmax(330px, 1.05fr);
+  align-content: start;
+  gap: 18px;
 }
 
 .context-stack h2,
@@ -563,14 +527,15 @@ summary {
 }
 
 .notes-capture-box {
-  margin-top: auto;
-  border-top: 1px solid var(--rule);
-  padding-top: 14px;
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+  gap: 8px;
 }
 
 .notes-capture-box textarea {
   width: 100%;
-  min-height: 210px;
+  min-height: 0;
   resize: vertical;
   border: 1px solid var(--rule);
   border-radius: 7px;
@@ -589,7 +554,7 @@ summary {
 }
 
 .notes-capture-box button {
-  margin-top: 8px;
+  width: 100%;
   justify-content: center;
   border-color: var(--accent);
   background: var(--accent);
@@ -597,13 +562,17 @@ summary {
 }
 
 .source-capture-box {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(96px, 0.7fr) auto minmax(74px, 0.55fr) auto;
+  gap: 10px;
   border-top: 1px solid var(--rule);
-  padding-top: 14px;
+  padding-top: 18px;
 }
 
 .source-capture-box textarea {
   width: 100%;
-  min-height: 116px;
+  min-height: 0;
   resize: vertical;
   border: 1px solid var(--rule);
   border-radius: 7px;
@@ -623,44 +592,14 @@ summary {
 
 .source-actions {
   display: grid;
-  margin-top: 10px;
 }
 
 .source-actions button {
   justify-content: center;
 }
 
-.source-kind-pills {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 10px;
-  margin-bottom: 10px;
-}
-
-.source-kind-pills button {
-  width: auto;
-  min-height: 30px;
-  border-radius: 999px;
-  border-color: color-mix(in srgb, var(--muted) 22%, var(--rule));
-  background: transparent;
-  color: var(--muted);
-  justify-content: center;
-  padding: 6px 12px;
-  font-size: 12px;
-  text-transform: lowercase;
-}
-
-.source-kind-pills button.active,
-.source-kind-pills button[aria-checked="true"] {
-  border-color: color-mix(in srgb, var(--accent) 58%, var(--rule));
-  background: color-mix(in srgb, var(--accent) 9%, var(--surface));
-  color: var(--accent);
-}
-
 .pdf-upload-actions {
   display: grid;
-  margin-top: 9px;
 }
 
 .pdf-upload-actions button {
@@ -682,7 +621,6 @@ summary {
   line-height: 1.4;
   text-align: center;
   cursor: pointer;
-  margin-top: 12px;
 }
 
 .source-file-dropzone:hover,
@@ -705,13 +643,41 @@ summary {
 }
 
 .pdf-upload-actions button:disabled {
-  opacity: 0.45;
   cursor: not-allowed;
+  transform: none;
 }
 
-.quiet-process {
-  border-top: 1px solid var(--rule);
-  padding-top: 10px;
+.input-pane button.primary-action {
+  min-height: 38px;
+  border-color: color-mix(in srgb, var(--accent) 54%, var(--rule));
+  background-color: var(--accent);
+  background-image: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--accent) 88%, #ffffff),
+    var(--accent)
+  );
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.22),
+    0 8px 18px color-mix(in srgb, var(--accent) 18%, transparent);
+  color: var(--accent-ink);
+  font-weight: 650;
+}
+
+.input-pane button.primary-action:disabled {
+  border-color: color-mix(in srgb, var(--muted) 18%, var(--rule));
+  background-color: color-mix(in srgb, var(--surface) 78%, var(--paper));
+  background-image: none;
+  box-shadow: none;
+  color: var(--muted);
+}
+
+.input-pane button.primary-action:hover,
+.input-pane button.primary-action:focus-visible {
+  border-color: color-mix(in srgb, var(--accent) 72%, var(--rule));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 0.26),
+    0 10px 24px color-mix(in srgb, var(--accent) 22%, transparent);
+  transform: translateY(-1px);
 }
 
 .suggestion {
@@ -1085,7 +1051,7 @@ summary {
 
 .passage-ledger dl {
   display: grid;
-  grid-template-columns: repeat(5, minmax(90px, 1fr));
+  grid-template-columns: repeat(4, minmax(90px, 1fr));
   gap: 10px;
   margin: 0;
 }

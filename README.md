@@ -16,7 +16,7 @@ The aim is restraint: readable typography, durable files, fast navigation, and a
 
 Essai opens in **Write** mode: one central Markdown editor, no permanent preview, and as much calm space as possible for drafting.
 
-The left pane in Write mode is a manuscript section tree, not a file browser. It shows section names only. Each section points to its own Markdown file through `book.json`, so renaming or reordering sections updates the project metadata while the manuscript remains plain files on disk.
+The left pane in Write mode is a manuscript section tree, not a file browser. It shows section names only. Each section points to its own Markdown file through `book.json`, so section structure stays in project metadata while the manuscript remains plain files on disk.
 
 The four modes are:
 
@@ -35,7 +35,7 @@ The Study room is built around:
 
 - **Archive navigation**: sources, concepts, objects, claims, notes, semantic bookmarks, and recent investigations.
 - **Concept investigation**: a central, non-editor surface organized around a concept such as `programmable machines`.
-- **Direct references**: source-grounded passages with visible file provenance, source type, page marker, confidence, and retrieval method.
+- **Direct references**: source-grounded passages with visible file provenance, page marker, confidence, and retrieval method.
 - **Conceptual echoes**: adjacent ideas that may deserve exploration.
 - **Claims**: claim records drawn from `sources/Claims.md`.
 - **Related objects**: artifact records drawn from `objects/`.
@@ -48,7 +48,7 @@ Study mode never writes to `main.md`. Its summaries and pathways are only interp
 
 ## Notes And Sources Capture
 
-The right pane is reserved for input. It contains a persistent **Notes** box, focused by default, so a fragment can be written immediately. Press **Submit Note** to append the note, clear the box, and keep writing the next one. `Cmd/Ctrl+Shift+N` returns focus to the Notes box.
+The right pane is reserved for input. It keeps **Notes** at the top and **Source** directly beneath it, so both capture flows are immediately available without extra panels. Press **Submit** to append a note, clear the box, and keep writing the next one. `Cmd/Ctrl+Shift+N` returns focus to the Notes box.
 
 On narrow screens or when focus mode hides the sidebars, the floating Notes button opens the same capture flow.
 
@@ -70,43 +70,35 @@ If the file does not exist, Essai creates it. Each capture is appended as:
 
 Older projects may still contain legacy inbox files. Essai keeps those files readable and does not delete them. New projects prefer `notes.md`.
 
-The right pane also contains a single **Source** panel for links, citations, quotes, raw references, and files. Every text source capture is appended to:
+The **Source** panel accepts links, citations, quotes, raw references, and files. Press **Commit** to append a text source to:
 
 ```txt
 sources/raw.md
 ```
 
-When a type is selected, Essai also mirrors the entry into the appropriate file:
-
-- `book` -> `sources/Books.md`
-- `paper` -> `sources/Papers.md`
-- `article` -> `sources/Articles.md`
-- `quote` -> `sources/Quotes.md`
-- `claim` -> `sources/Claims.md`
-
-Source files can be uploaded from the same Source panel by choosing a file or dropping it onto the file target. Choose the source type first. Dropped files are archived immediately and refresh the Study index; chosen files are archived when **Upload File** is pressed. Essai stores each file inside the project under:
+Source files can be uploaded from the same Source panel by choosing a file or dropping it onto the file target. Dropped files are archived immediately and refresh the Study index; chosen files are archived when **Upload File** is pressed. The interface archives new uploads as raw source files under:
 
 ```txt
-sources/files/<type>/
+sources/files/raw/
 ```
 
-It then indexes the upload in `sources/raw.md` and mirrors the entry into the selected typed source file. The Markdown index stays readable, and the file remains in a portable subfolder beside the manuscript.
+It then indexes the upload in `sources/raw.md`. The Markdown index stays readable, and the file remains in a portable subfolder beside the manuscript.
 
 File uploads follow the same authorship rule as everything else in Essai: the file is archived and indexed, but its contents are not rewritten into the manuscript. A source file entry looks like:
 
 ```md
 ## 2026-05-15 14:30
 
-Type: paper
+Type: raw
 
-File: [Important Notes.txt](files/paper/20260515-143000-Important-Notes.txt)
+File: [Important Notes.txt](files/raw/20260515-143000-Important-Notes.txt)
 
 Uploaded source file.
 
 ---
 ```
 
-The stored filename is timestamped and sanitized so source folders stay git-friendly. Unknown source types fall back to `raw`, and empty files are rejected before any Markdown index is changed.
+The stored filename is timestamped and sanitized so source folders stay git-friendly. Empty files are rejected before any Markdown index is changed.
 
 Every text source capture and uploaded source file also refreshes:
 
@@ -177,8 +169,7 @@ projects/
       Quotes.md
       Claims.md
       files/
-        paper/
-        book/
+        raw/
     drafts/
     fragments/
 ```
@@ -206,22 +197,11 @@ Production deployments should not rely on Vercel filesystem persistence. Use the
 Text sources and uploaded source files are deliberately handled as archive operations:
 
 - `sources/raw.md` is the chronological ledger of every source capture.
-- Typed files such as `sources/Papers.md` and `sources/Books.md` are filtered indexes.
-- Uploaded files live under `sources/files/<type>/`.
+- Typed files such as `sources/Papers.md` and `sources/Books.md` may exist for legacy or API-driven classification, but the primary interface now commits uncategorized source captures to `sources/raw.md`.
+- Uploaded files from the interface live under `sources/files/raw/`.
 - Markdown indexes link to uploaded files with relative links, so the project folder remains portable.
 - `sources/.study-index.json` is refreshed after every source capture or file upload so Study search can use the latest archive state.
 - AI may later classify or summarize sources, but it must not alter `main.md` without an explicit human action.
-
-The current source types are:
-
-```txt
-raw
-book
-paper
-article
-quote
-claim
-```
 
 ## Setup
 
@@ -249,7 +229,7 @@ The test suite covers:
 - project creation and latest-project ordering
 - note capture into `notes.md`
 - preservation of legacy inbox files
-- text source indexing and typed mirroring
+- text source indexing
 - source file storage, sanitization, and Markdown indexing
 - Study source index refresh after source capture and upload
 - binary storage list/read/rename/delete behavior

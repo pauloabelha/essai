@@ -1,18 +1,21 @@
 import { defineConfig, devices } from "@playwright/test";
 
+const port = process.env.PORT ?? "3000";
+const baseURL = `http://localhost:${port}`;
+
 export default defineConfig({
   testDir: "./tests/e2e",
   fullyParallel: true,
   webServer: {
-    command: "npm run dev",
-    url: "http://localhost:3000",
+    command: `npm run dev -- --port ${port}`,
+    url: baseURL,
     reuseExistingServer: false,
     env: {
       ESSAI_DATA_ROOT: "./.playwright-data",
     },
   },
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL,
     trace: "on-first-retry",
   },
   projects: [

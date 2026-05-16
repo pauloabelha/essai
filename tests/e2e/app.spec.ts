@@ -26,43 +26,29 @@ test("create project, capture notes and sources, write, focus, read, and navigat
     "rgb(15, 14, 12)",
   );
   await page.getByRole("button", { name: "Light mode" }).click();
-  await page.getByRole("button", { name: "Rename Main" }).click();
-  await page.getByLabel("Section name").fill("Opening");
-  await page.keyboard.press("Enter");
   await expect(
     page
       .getByRole("navigation", { name: "Sections" })
-      .getByRole("button", { name: "Opening", exact: true }),
+      .getByRole("button", { name: "Main", exact: true }),
   ).toBeVisible();
   await expect(
     page.getByRole("navigation", { name: "Sections" }).getByText("main.md"),
   ).toHaveCount(0);
-  const listedBooks = (await (
-    await request.get("/api/books")
-  ).json()) as Array<{
-    id: string;
-    sections?: Array<{ title: string; path: string }>;
-  }>;
-  expect(
-    listedBooks.find((listedBook) => listedBook.id === book.id)?.sections?.[0],
-  ).toMatchObject({ title: "Opening", path: "main.md" });
 
   await page.getByLabel("Notes input").fill("A captured note for later.");
-  await page.getByRole("button", { name: "Submit Note" }).click();
+  await page.getByRole("button", { name: "Submit", exact: true }).click();
   await expect(page.getByText("Captured.")).toBeVisible();
   await expect(page.getByLabel("Notes input")).toHaveValue("");
   await page.getByLabel("Sources input").fill("https://example.com/source");
-  await page
-    .getByRole("radiogroup", { name: "Source type", exact: true })
-    .getByRole("radio", { name: "paper" })
-    .click();
-  await page.getByRole("button", { name: "Commit Source" }).click();
-  await expect(page.getByText("Source saved as paper.")).toBeVisible();
+  await page.getByRole("button", { name: "Commit" }).click();
+  await expect(page.getByText("Source saved.")).toBeVisible();
   await page.getByRole("button", { name: "Study" }).click();
-  await page.getByRole("button", { name: "Papers.md" }).click();
+  await page.getByRole("button", { name: "raw.md" }).click();
   await page.getByLabel("Study search").fill("example source");
   await expect(page.locator(".app-frame")).toHaveClass(/study-active/);
-  await expect(page.getByLabel("Input")).toBeVisible();
+  await expect(
+    page.getByRole("complementary", { name: "Input" }),
+  ).toBeVisible();
   await expect(
     page.getByRole("heading", { name: "Direct References" }),
   ).toBeVisible();
@@ -78,32 +64,27 @@ test("create project, capture notes and sources, write, focus, read, and navigat
     mimeType: "text/plain",
     buffer: Buffer.from("source notes\n"),
   });
-  await page
-    .getByRole("radiogroup", { name: "Source type", exact: true })
-    .getByRole("radio", { name: "book" })
-    .click();
   await page.getByRole("button", { name: "Upload File" }).click();
-  await expect(page.getByText("File saved as book.")).toBeVisible();
-  await page.getByRole("button", { name: "raw.md" }).click();
-  await expect(page.locator(".cm-content")).toContainText(
-    "https://example.com/source",
-  );
-  await expect(page.locator(".cm-content")).toContainText("sample-notes.txt");
-  await page.getByRole("button", { name: "Notes", exact: true }).click();
-  await expect(page.locator(".cm-content")).toContainText(
-    "A captured note for later.",
-  );
+  await expect(page.getByText("File saved.")).toBeVisible();
+  const rawSource = (await (
+    await request.get(`/api/books/${book.id}/files/sources/raw.md`)
+  ).json()) as { content: string };
+  expect(rawSource.content).toContain("https://example.com/source");
+  expect(rawSource.content).toContain("sample-notes.txt");
+  const notes = (await (
+    await request.get(`/api/books/${book.id}/files/notes.md`)
+  ).json()) as { content: string };
+  expect(notes.content).toContain("A captured note for later.");
 
   await page
     .getByRole("navigation")
-    .getByRole("button", { name: "Opening" })
+    .getByRole("button", { name: "Main" })
     .click();
   await page.locator(".cm-content").click();
   await page.keyboard.type("A sentence about [[music-cylinder]].");
   await page.keyboard.press(
     process.platform === "darwin" ? "Meta+S" : "Control+S",
   );
-  await expect(page.locator(".save-state")).toHaveText("saved");
 
   await page.getByRole("button", { name: "Preview" }).click();
   await expect(page.locator(".preview-shell")).toContainText(

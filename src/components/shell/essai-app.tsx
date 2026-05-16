@@ -9,18 +9,17 @@ import {
   GitBranch,
   Maximize2,
   Moon,
-  Pencil,
   Plus,
   Save,
   SplitSquareHorizontal,
   Sun,
+  Upload,
 } from "lucide-react";
 import { useTheme } from "next-themes";
 import { MarkdownView } from "@/components/reading/markdown-view";
 import type { AiSuggestion } from "@/lib/ai/types";
 import { expandSlashCommand, slashSnippets } from "@/lib/editor/slash";
 import { countNoteBlocks } from "@/lib/projects/notes";
-import type { SourceKind } from "@/lib/projects/sources";
 import type { BookMetadata, ManuscriptSection } from "@/lib/projects/templates";
 import type { FileNode } from "@/lib/storage/types";
 
@@ -99,7 +98,7 @@ export function EssaiApp({
   const [files, setFiles] = useState<FileNode[]>([]);
   const [openPath, setOpenPath] = useState("main.md");
   const [draft, setDraft] = useState("");
-  const [saveState, setSaveState] = useState<SaveState>("saved");
+  const [, setSaveState] = useState<SaveState>("saved");
   const [viewMode, setViewMode] = useState<ViewMode>("write");
   const [splitPreview, setSplitPreview] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
@@ -108,7 +107,6 @@ export function EssaiApp({
   const [notesCaptureOpen, setNotesCaptureOpen] = useState(false);
   const [noteInput, setNoteInput] = useState("");
   const [sourceInput, setSourceInput] = useState("");
-  const [sourceKind, setSourceKind] = useState<SourceKind>("raw");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [captureStatus, setCaptureStatus] = useState("");
   const [notesCount, setNotesCount] = useState(0);
@@ -378,12 +376,10 @@ export function EssaiApp({
     await fetch(`/api/books/${bookId}/sources`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ source: sourceInput, kind: sourceKind }),
+      body: JSON.stringify({ source: sourceInput, kind: "raw" }),
     });
     setSourceInput("");
-    setCaptureStatus(
-      sourceKind === "raw" ? "Source saved." : `Source saved as ${sourceKind}.`,
-    );
+    setCaptureStatus("Source saved.");
     await loadFiles();
     if (openPath.startsWith("sources/")) await loadFile(openPath);
     window.setTimeout(() => setCaptureStatus(""), 1600);
@@ -394,7 +390,7 @@ export function EssaiApp({
     if (!bookId || !file) return;
     const form = new FormData();
     form.append("file", file);
-    form.append("kind", sourceKind);
+    form.append("kind", "raw");
     try {
       const response = await fetch(`/api/books/${bookId}/sources/upload`, {
         method: "POST",
@@ -415,7 +411,7 @@ export function EssaiApp({
     }
     setPdfFile(null);
     if (pdfInputRef.current) pdfInputRef.current.value = "";
-    setCaptureStatus(`File saved as ${sourceKind}.`);
+    setCaptureStatus("File saved.");
     await loadFiles();
     if (openPath.startsWith("sources/")) await loadFile(openPath);
     window.setTimeout(() => setCaptureStatus(""), 1800);
@@ -438,11 +434,6 @@ export function EssaiApp({
   function moveManuscriptSection(dragId: string, targetId: string) {
     if (dragId === targetId) return;
     const result = moveSectionBefore(manuscriptSections, dragId, targetId);
-    if (result) updateManuscriptSections(result);
-  }
-
-  function renameManuscriptSection(sectionId: string, title: string) {
-    const result = updateSectionTitle(manuscriptSections, sectionId, title);
     if (result) updateManuscriptSections(result);
   }
 
@@ -572,7 +563,6 @@ export function EssaiApp({
             activePath={openPath}
             onOpen={loadFile}
             onMove={moveManuscriptSection}
-            onRename={renameManuscriptSection}
           />
         </aside>
       ) : null}
@@ -586,7 +576,6 @@ export function EssaiApp({
           <div className="toolbar">
             {viewMode !== "study" ? (
               <>
-                <span className={`save-state ${saveState}`}>{saveState}</span>
                 <button title="Save" onClick={saveFile}>
                   <Save size={16} />
                 </button>
@@ -645,7 +634,8 @@ export function EssaiApp({
               <BookOpen size={16} /> Read
             </button>
             <button
-              title="Theme"
+              aria-label={theme === "dark" ? "Light mode" : "Dark mode"}
+              title={theme === "dark" ? "Light mode" : "Dark mode"}
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
             >
               {theme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
@@ -692,16 +682,13 @@ export function EssaiApp({
             onNoteCommit={commitNote}
             noteTextareaRef={noteInputRef}
             sourceValue={sourceInput}
-            sourceKind={sourceKind}
             pdfFile={pdfFile}
             pdfInputRef={pdfInputRef}
             onSourceChange={setSourceInput}
-            onSourceKindChange={setSourceKind}
             onSourceCommit={commitSource}
             onPdfChange={setPdfFile}
             onPdfUpload={uploadSourceFile}
             onPdfDrop={uploadSourceFile}
-            onAi={askAi}
           />
         </aside>
       ) : null}
@@ -714,16 +701,13 @@ export function EssaiApp({
             onNoteCommit={commitNote}
             noteTextareaRef={noteInputRef}
             sourceValue={sourceInput}
-            sourceKind={sourceKind}
             pdfFile={pdfFile}
             pdfInputRef={pdfInputRef}
             onSourceChange={setSourceInput}
-            onSourceKindChange={setSourceKind}
             onSourceCommit={commitSource}
             onPdfChange={setPdfFile}
             onPdfUpload={uploadSourceFile}
             onPdfDrop={uploadSourceFile}
-            onAi={askAi}
           />
         </aside>
       ) : null}
@@ -783,41 +767,27 @@ function InputPane({
   onNoteCommit,
   noteTextareaRef,
   sourceValue,
-  sourceKind,
   pdfFile,
   pdfInputRef,
   onSourceChange,
-  onSourceKindChange,
   onSourceCommit,
   onPdfChange,
   onPdfUpload,
   onPdfDrop,
-  onAi,
 }: {
   noteValue: string;
   onNoteChange: (value: string) => void;
   onNoteCommit: () => void;
   noteTextareaRef: RefObject<HTMLTextAreaElement | null>;
   sourceValue: string;
-  sourceKind: SourceKind;
   pdfFile: File | null;
   pdfInputRef: RefObject<HTMLInputElement | null>;
   onSourceChange: (value: string) => void;
-  onSourceKindChange: (value: SourceKind) => void;
   onSourceCommit: () => void;
   onPdfChange: (value: File | null) => void;
   onPdfUpload: () => void;
   onPdfDrop: (file: File) => void;
-  onAi: (kind: string) => void;
 }) {
-  const sourceKinds = [
-    "raw",
-    "book",
-    "paper",
-    "article",
-    "quote",
-    "claim",
-  ] satisfies SourceKind[];
   return (
     <div className="input-pane">
       <section className="notes-capture-box">
@@ -836,17 +806,11 @@ function InputPane({
             }
           }}
         />
-        <button onClick={onNoteCommit}>Submit Note</button>
+        <button onClick={onNoteCommit}>Submit</button>
         <p className="muted">Saved to notes.md</p>
       </section>
       <section className="source-capture-box">
         <p className="eyebrow">Source</p>
-        <SourceKindPills
-          label="Source type"
-          value={sourceKind}
-          kinds={sourceKinds}
-          onChange={onSourceKindChange}
-        />
         <textarea
           aria-label="Sources input"
           placeholder="Paste a link, citation, quote, or raw source."
@@ -854,7 +818,9 @@ function InputPane({
           onChange={(event) => onSourceChange(event.target.value)}
         />
         <div className="source-actions">
-          <button onClick={onSourceCommit}>Commit Source</button>
+          <button className="primary-action" onClick={onSourceCommit}>
+            <Save size={15} /> Commit
+          </button>
         </div>
         <label
           className="source-file-dropzone"
@@ -875,18 +841,14 @@ function InputPane({
           <span>{pdfFile ? pdfFile.name : "Drop a file or choose one"}</span>
         </label>
         <div className="pdf-upload-actions">
-          <button onClick={() => onPdfUpload()} disabled={!pdfFile}>
-            Upload File
+          <button
+            className="primary-action"
+            onClick={() => onPdfUpload()}
+            disabled={!pdfFile}
+          >
+            <Upload size={15} /> Upload File
           </button>
         </div>
-        <p className="muted">
-          Text is saved to sources/raw.md and mirrored by type. Files are stored
-          under sources/files and indexed for Study.
-        </p>
-      </section>
-      <section className="quiet-process">
-        <h2>Later</h2>
-        <button onClick={() => onAi("reindex-inbox")}>Organize notes</button>
       </section>
     </div>
   );
@@ -897,13 +859,11 @@ function SectionTree({
   activePath,
   onOpen,
   onMove,
-  onRename,
 }: {
   sections: ManuscriptSection[];
   activePath: string;
   onOpen: (path: string) => void;
   onMove: (dragId: string, targetId: string) => void;
-  onRename: (sectionId: string, title: string) => void;
 }) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   return (
@@ -920,7 +880,6 @@ function SectionTree({
           depth={0}
           onOpen={onOpen}
           onMove={onMove}
-          onRename={onRename}
           onDragStart={setDraggingId}
           onDragEnd={() => setDraggingId(null)}
         />
@@ -936,7 +895,6 @@ function SectionTreeItem({
   depth,
   onOpen,
   onMove,
-  onRename,
   onDragStart,
   onDragEnd,
 }: {
@@ -946,30 +904,9 @@ function SectionTreeItem({
   depth: number;
   onOpen: (path: string) => void;
   onMove: (dragId: string, targetId: string) => void;
-  onRename: (sectionId: string, title: string) => void;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
 }) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editTitle, setEditTitle] = useState(section.title);
-  const renameCommittedRef = useRef(false);
-
-  useEffect(() => {
-    if (!isEditing) setEditTitle(section.title);
-  }, [isEditing, section.title]);
-
-  function commitRename() {
-    if (renameCommittedRef.current) return;
-    renameCommittedRef.current = true;
-    const nextTitle = editTitle.trim();
-    setIsEditing(false);
-    if (!nextTitle) {
-      setEditTitle(section.title);
-      return;
-    }
-    if (nextTitle !== section.title) onRename(section.id, nextTitle);
-  }
-
   return (
     <div className="section-tree-node">
       <div
@@ -992,60 +929,20 @@ function SectionTreeItem({
           onDragEnd();
         }}
       >
-        {isEditing ? (
-          <form
-            className="section-rename-form"
-            onSubmit={(event) => {
-              event.preventDefault();
-              commitRename();
-            }}
-          >
-            <input
-              aria-label="Section name"
-              value={editTitle}
-              onChange={(event) => setEditTitle(event.target.value)}
-              onBlur={commitRename}
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  renameCommittedRef.current = true;
-                  setEditTitle(section.title);
-                  setIsEditing(false);
-                }
-              }}
-              autoFocus
-            />
-          </form>
-        ) : (
-          <>
-            <button
-              type="button"
-              draggable
-              className="section-open-button"
-              onClick={() => onOpen(section.path)}
-              onDragStart={(event) => {
-                event.dataTransfer.effectAllowed = "move";
-                event.dataTransfer.setData("text/plain", section.id);
-                onDragStart(section.id);
-              }}
-              onDragEnd={onDragEnd}
-            >
-              <span>{section.title}</span>
-            </button>
-            <button
-              type="button"
-              className="section-rename-button"
-              aria-label={`Rename ${section.title}`}
-              title="Rename section"
-              onClick={() => {
-                renameCommittedRef.current = false;
-                setIsEditing(true);
-              }}
-            >
-              <Pencil size={12} />
-            </button>
-          </>
-        )}
+        <button
+          type="button"
+          draggable
+          className="section-open-button"
+          onClick={() => onOpen(section.path)}
+          onDragStart={(event) => {
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", section.id);
+            onDragStart(section.id);
+          }}
+          onDragEnd={onDragEnd}
+        >
+          <span>{section.title}</span>
+        </button>
       </div>
       {section.children?.length ? (
         <div className="section-tree-children">
@@ -1058,42 +955,12 @@ function SectionTreeItem({
               depth={depth + 1}
               onOpen={onOpen}
               onMove={onMove}
-              onRename={onRename}
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}
             />
           ))}
         </div>
       ) : null}
-    </div>
-  );
-}
-
-function SourceKindPills({
-  label,
-  value,
-  kinds,
-  onChange,
-}: {
-  label: string;
-  value: SourceKind;
-  kinds: SourceKind[];
-  onChange: (value: SourceKind) => void;
-}) {
-  return (
-    <div className="source-kind-pills" aria-label={label} role="radiogroup">
-      {kinds.map((kind) => (
-        <button
-          key={kind}
-          type="button"
-          role="radio"
-          aria-checked={value === kind}
-          className={value === kind ? "active" : ""}
-          onClick={() => onChange(kind)}
-        >
-          {kind}
-        </button>
-      ))}
     </div>
   );
 }
@@ -1377,10 +1244,6 @@ function StudyPassageSection({
                   <dd>{passage.sourceFile}</dd>
                 </div>
                 <div>
-                  <dt>Type</dt>
-                  <dd>{passage.sourceType}</dd>
-                </div>
-                <div>
                   <dt>Page</dt>
                   <dd>{passage.page}</dd>
                 </div>
@@ -1536,7 +1399,7 @@ function NotesCaptureModal({
         />
         <div className="notes-actions">
           <span>Enter captures. Shift+Enter makes a line.</span>
-          <button onClick={onCommit}>Submit Note</button>
+          <button onClick={onCommit}>Submit</button>
         </div>
       </section>
     </div>
@@ -1631,31 +1494,6 @@ function insertSectionBefore(
     }
   }
   return null;
-}
-
-function updateSectionTitle(
-  sections: ManuscriptSection[],
-  sectionId: string,
-  title: string,
-): ManuscriptSection[] | null {
-  let changed = false;
-  const next = sections.map((section) => {
-    if (section.id === sectionId) {
-      changed = true;
-      return { ...section, title };
-    }
-    const children = updateSectionTitle(
-      section.children ?? [],
-      sectionId,
-      title,
-    );
-    if (children) {
-      changed = true;
-      return { ...section, children };
-    }
-    return section;
-  });
-  return changed ? next : null;
 }
 
 function titleCase(value: string) {
