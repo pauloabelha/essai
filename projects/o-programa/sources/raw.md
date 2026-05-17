@@ -31,3 +31,13 @@ Type: article
 Koetsier, T., 2001. On the prehistory of programmable machines: musical automata, looms, calculators. Mechanism and Machine theory, 36(5), pp.589-603.
 
 ---
+
+## 2026-05-15 23:09
+
+Type: book
+
+File: [Robinson, C (ed) - The New Cambridge History of Islam – Vol 1.pdf](files/book/20260515-230952-Robinson-C-ed---The-New-Cambridge-History-of-Islam-Vol-1.pdf)
+
+Uploaded source file.
+
+---

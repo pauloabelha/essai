@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { createBook } from "@/lib/projects/service";
+import { appendSourceFile } from "@/lib/projects/sources";
+import { appendNote } from "@/lib/projects/notes";
 import { InMemoryStorageProvider } from "@/lib/storage/in-memory";
 import { buildStudyInvestigation } from "@/lib/study/archive";
 
@@ -98,6 +101,70 @@ Programmable machines appear in the paper index.
         (passage) => passage.sourceFile === "sources/Papers.md",
       ),
     ).toBe(true);
+  });
+
+  it("limits retrieval to a selected uploaded source file", async () => {
+    const storage = new InMemoryStorageProvider();
+    await createBook(storage, "Book");
+    const upload = await appendSourceFile(
+      storage,
+      "book",
+      {
+        name: "machine-notes.txt",
+        bytes: new TextEncoder().encode(
+          "Programmable machines appear in the uploaded source.",
+        ),
+      },
+      "raw",
+      new Date("2026-05-15T10:00:00Z"),
+    );
+
+    const study = await buildStudyInvestigation(storage, "book", {
+      query: "programmable machines",
+      sourcePaths: [upload.filePath],
+    });
+
+    expect(study.directReferences[0].sourceFile).toBe(upload.filePath);
+    expect(study.sourceCoverage.files).toBe(1);
+  });
+
+  it("indexes notes taken in the context of a selected source", async () => {
+    const storage = new InMemoryStorageProvider();
+    await createBook(storage, "Book");
+    const upload = await appendSourceFile(
+      storage,
+      "book",
+      {
+        name: "machine-notes.txt",
+        bytes: new TextEncoder().encode("Programmable machines."),
+      },
+      "raw",
+      new Date("2026-05-15T10:00:00Z"),
+    );
+    await appendNote(
+      storage,
+      "book",
+      "This source frames programmable machines as portable behavior.",
+      new Date("2026-05-15T10:05:00Z"),
+      {
+        path: upload.filePath,
+        title: "machine-notes.txt",
+      },
+    );
+
+    const study = await buildStudyInvestigation(storage, "book", {
+      query: "portable behavior",
+      sourcePaths: [upload.filePath],
+    });
+
+    expect(study.directReferences).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          sourceFile: upload.filePath,
+          sourceType: "note",
+        }),
+      ]),
+    );
   });
 
   it("refreshes the Study index when missing", async () => {

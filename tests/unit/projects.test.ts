@@ -65,6 +65,30 @@ describe("project creation", () => {
     expect(countNoteBlocks(result.content)).toBe(1);
   });
 
+  it("records source provenance when appending a source note", async () => {
+    const storage = new InMemoryStorageProvider();
+    await createBook(storage, "My Book");
+    const result = await appendNote(
+      storage,
+      "my-book",
+      "Selected passage.",
+      new Date("2026-05-14T21:30:00Z"),
+      {
+        path: "sources/raw.md",
+        title: "raw.md",
+        quote: "Selected passage.",
+      },
+    );
+
+    expect(result.content).toContain("Source: sources/raw.md");
+    expect(result.content).toContain("Source title: raw.md");
+    expect(result.content).toContain("Source quote: Selected passage.");
+    expect(result.content).toContain("Selected passage.");
+    expect(
+      await storage.readFile("projects/my-book/sources/.study-index.json"),
+    ).toContain("Selected passage.");
+  });
+
   it("preserves older inbox files while writing notes.md", async () => {
     const storage = new InMemoryStorageProvider({
       "projects/old-book/book.json": JSON.stringify({
@@ -124,16 +148,18 @@ describe("project creation", () => {
       new Date("2026-05-14T21:30:00Z"),
     );
 
-    expect(result.filePath).toBe(
-      "sources/files/paper/20260514-213000-Important-Notes.txt",
-    );
+    const expectedPath =
+      "sources/files/paper/20260514-213000-Important-Notes-0a6c1577744b.txt";
+    expect(result.filePath).toBe(expectedPath);
     expect(
       await storage.readBinaryFile?.(
-        "projects/my-book/sources/files/paper/20260514-213000-Important-Notes.txt",
+        `projects/my-book/${expectedPath}`,
       ),
-    ).toEqual(new TextEncoder().encode("Source text about programmable machines."));
+    ).toEqual(
+      new TextEncoder().encode("Source text about programmable machines."),
+    );
     expect(await storage.readFile("projects/my-book/sources/raw.md")).toContain(
-      "[Important Notes.txt](files/paper/20260514-213000-Important-Notes.txt)",
+      "[Important Notes.txt](files/paper/20260514-213000-Important-Notes-0a6c1577744b.txt)",
     );
     expect(
       await storage.readFile("projects/my-book/sources/Papers.md"),
@@ -164,6 +190,55 @@ describe("project creation", () => {
         chunk.text.includes("programmable machines"),
       ),
     ).toBe(true);
+  });
+
+  it("does not overwrite existing uploads with the same name and timestamp", async () => {
+    const storage = new InMemoryStorageProvider();
+    await createBook(storage, "My Book");
+    const date = new Date("2026-05-14T21:30:00Z");
+    const first = await appendSourceFile(
+      storage,
+      "my-book",
+      {
+        name: "Important Notes.txt",
+        bytes: new TextEncoder().encode("Source text about programmable machines."),
+      },
+      "raw",
+      date,
+    );
+    const duplicate = await appendSourceFile(
+      storage,
+      "my-book",
+      {
+        name: "Important Notes.txt",
+        bytes: new TextEncoder().encode("Source text about programmable machines."),
+      },
+      "raw",
+      date,
+    );
+    const different = await appendSourceFile(
+      storage,
+      "my-book",
+      {
+        name: "Important Notes.txt",
+        bytes: new TextEncoder().encode("Different source text."),
+      },
+      "raw",
+      date,
+    );
+
+    expect(duplicate.filePath).toBe(first.filePath);
+    expect(different.filePath).toBe(
+      "sources/files/raw/20260514-213000-Important-Notes-7b7ad398afeb.txt",
+    );
+    expect(
+      await storage.readBinaryFile?.(`projects/my-book/${first.filePath}`),
+    ).toEqual(
+      new TextEncoder().encode("Source text about programmable machines."),
+    );
+    expect(
+      await storage.readBinaryFile?.(`projects/my-book/${different.filePath}`),
+    ).toEqual(new TextEncoder().encode("Different source text."));
   });
 
   it("rejects empty source file uploads before indexing them", async () => {

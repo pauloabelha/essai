@@ -1,11 +1,31 @@
 import { readBookFile, writeBookFile } from "./files";
+import { refreshStudySourceIndex } from "@/lib/study/source-index";
 import type { StorageProvider } from "@/lib/storage/types";
 
 export const CURRENT_NOTES_PATH = "notes.md";
 
-export function formatNoteBlock(note: string, date = new Date()) {
+export interface NoteSourceReference {
+  path: string;
+  title?: string;
+  quote?: string;
+}
+
+export function formatNoteBlock(
+  note: string,
+  date = new Date(),
+  source?: NoteSourceReference,
+) {
   const timestamp = date.toISOString().slice(0, 16).replace("T", " ");
-  return `## ${timestamp}\n\n${note.trim()}\n\n---\n`;
+  const sourceLines = source
+    ? [
+        `Source: ${source.path}`,
+        source.title ? `Source title: ${source.title}` : "",
+        source.quote ? `Source quote: ${source.quote.trim()}` : "",
+      ]
+        .filter(Boolean)
+        .join("\n") + "\n\n"
+    : "";
+  return `## ${timestamp}\n\n${sourceLines}${note.trim()}\n\n---\n`;
 }
 
 export function countNoteBlocks(markdown: string) {
@@ -19,6 +39,7 @@ export async function appendNote(
   bookId: string,
   note: string,
   date = new Date(),
+  source?: NoteSourceReference,
 ) {
   const trimmed = note.trim();
   if (!trimmed) throw new Error("Note is required");
@@ -31,8 +52,13 @@ export async function appendNote(
     // Missing notes.md is normal for older projects.
   }
 
-  const next = `${current.trimEnd()}\n\n${formatNoteBlock(trimmed, date)}`;
+  const next = `${current.trimEnd()}\n\n${formatNoteBlock(
+    trimmed,
+    date,
+    source,
+  )}`;
   await writeBookFile(storage, bookId, CURRENT_NOTES_PATH, next);
+  await refreshStudySourceIndex(storage, bookId);
   return {
     path: CURRENT_NOTES_PATH,
     count: countNoteBlocks(next),

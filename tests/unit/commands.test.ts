@@ -4,7 +4,6 @@ const commands = [
   "Open file",
   "New note",
   "Save",
-  "Toggle reading mode",
   "Toggle preview",
   "Reindex inbox",
   "Suggest links",
@@ -20,7 +19,7 @@ const commands = [
 describe("command palette actions", () => {
   it("contains the expected writing commands", () => {
     expect(commands).toContain("Save");
-    expect(commands).toContain("Toggle reading mode");
+    expect(commands).toContain("Toggle preview");
     expect(commands).toContain("Extract claims");
     expect(commands).toContain("Focus Notes");
     expect(commands).toContain("/claim");

@@ -18,22 +18,21 @@ Essai opens in **Write** mode: one central Markdown editor, no permanent preview
 
 The left pane in Write mode is a manuscript section tree, not a file browser. It shows section names only. Each section points to its own Markdown file through `book.json`, so section structure stays in project metadata while the manuscript remains plain files on disk.
 
-The four modes are:
+The three modes are:
 
 - **Write**: the default writing desk. Editor only.
-- **Preview**: rendered Markdown for checking structure and links. A split preview can be toggled when needed.
-- **Read**: immersive, magazine-style reading with sidebars and editing chrome hidden.
+- **Preview**: rendered Markdown for checking structure, links, and reading flow. A split preview can be toggled when needed.
 - **Study**: a separate semantic archive room for investigating concepts, claims, sources, notes, and objects without editing the manuscript.
 
 Focus mode hides both sidebars when the page needs to become only the text.
 
 ## Study Mode
 
-Study mode treats the project’s `sources/` directory as the semantic archive layer of the book. It is not a chatbot, an AI sidebar, or a writing assistant. It is a calm research surface for asking what the archive can support.
+Study mode treats the project’s `sources/` directory as the semantic archive layer of the book. It is not a chatbot, an AI sidebar, or a writing assistant. It is a calm research surface for reading sources, filtering the archive, and making new notes without leaving the study view.
 
 The Study room is built around:
 
-- **Archive navigation**: sources, concepts, objects, claims, notes, semantic bookmarks, and recent investigations.
+- **Source shelf**: source indexes and uploaded files stay visible in the left rail, where they can filter the central investigation.
 - **Concept investigation**: a central, non-editor surface organized around a concept such as `programmable machines`.
 - **Direct references**: source-grounded passages with visible file provenance, page marker, confidence, and retrieval method.
 - **Conceptual echoes**: adjacent ideas that may deserve exploration.
@@ -44,11 +43,11 @@ The Study room is built around:
 
 The first implementation uses local source indexes and a hybrid lexical/semantic-neighbor retrieval scaffold. It is designed so future embeddings, BM25, reranking, and GPT adjudication can be added behind the same provenance-first interface.
 
-Study mode never writes to `main.md`. Its summaries and pathways are only interpretive views over auxiliary project files.
+Study mode never writes to `main.md`. Its summaries and pathways are only interpretive views over auxiliary project files. The right capture panel stays available in Study mode, so notes and new sources can be added while the source shelf remains visible.
 
 ## Notes And Sources Capture
 
-The right pane is reserved for input. It keeps **Notes** at the top and **Source** directly beneath it, so both capture flows are immediately available without extra panels. Press **Submit** to append a note, clear the box, and keep writing the next one. `Cmd/Ctrl+Shift+N` returns focus to the Notes box.
+The right pane is reserved for input. It keeps **Notes** at the top and **Source** directly beneath it, so both capture flows are immediately available without extra panels. Press **Submit** to append a note, clear the box, and keep writing the next one. In Study mode, selecting text inside the central source reader can also create a note; Essai records the selected quote with `Source:` metadata so the note remains indexed back to the source it came from. `Cmd/Ctrl+Shift+N` returns focus to the Notes box.
 
 On narrow screens or when focus mode hides the sidebars, the floating Notes button opens the same capture flow.
 
@@ -98,7 +97,7 @@ Uploaded source file.
 ---
 ```
 
-The stored filename is timestamped and sanitized so source folders stay git-friendly. Empty files are rejected before any Markdown index is changed.
+The stored filename is timestamped, sanitized, and includes a short SHA-256 content hash so source folders stay git-friendly without silently overwriting existing uploads. If the same file is uploaded again at the same timestamp, Essai reuses the existing archived binary and adds another source entry pointing at it. If a same-name collision has different bytes, the hash produces a different filename; a numbered suffix is kept as a final collision fallback. Empty files are rejected before any Markdown index is changed.
 
 Every text source capture and uploaded source file also refreshes a backend search index:
 
@@ -233,7 +232,7 @@ The test suite covers:
 - source file storage, sanitization, and Markdown indexing
 - Study source index refresh after source capture and upload
 - binary storage list/read/rename/delete behavior
-- write/preview/read mode switching
+- write/preview/study mode switching
 - study mode archive investigation from `sources/`
 - focus mode
 - end-to-end note, text source, and file source capture
@@ -243,7 +242,7 @@ The test suite covers:
 - `Cmd/Ctrl+S`: save
 - `Cmd/Ctrl+K`: command palette
 - `Cmd/Ctrl+P`: quick open
-- `Cmd/Ctrl+R`: reading mode
+- `Cmd/Ctrl+R`: preview mode
 - `Cmd/Ctrl+Shift+N`: focus notes input
 - `Cmd/Ctrl+.`: focus mode
 - `Cmd/Ctrl+B`: bold selected text

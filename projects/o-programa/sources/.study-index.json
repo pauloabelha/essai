@@ -1,0 +1,271 @@
+{
+  "version": 2,
+  "updatedAt": "2026-05-16T01:07:59.207Z",
+  "documents": [
+    {
+      "id": "sources-articles-md",
+      "path": "sources/Articles.md",
+      "title": "Articles.md",
+      "kind": "markdown",
+      "sourceType": "article",
+      "mimeType": "text/markdown",
+      "sizeBytes": 556,
+      "searchText": "# Articles\n\n## 2026-05-14 22:26\n\nType: article\n\nhttps://hyperallergic.com/the-9th-century-islamic-instrument-which-plays-by-itself/\n\n---\n\n## 2026-05-14 22:26\n\nType: article\n\nhttps://en.wikipedia.org/wiki/Ban%C5%AB_M%C5%ABs%C4%81_brothers\n\n---\n\n## 2026-05-14 22:27\n\nType: article\n\nhttps://en.wikipedia.org/wiki/Book_of_Ingenious_Devices#cite_note-Koetsier-21\n\n---\n\n## 2026-05-14 22:28\n\nType: article\n\nKoetsier, T., 2001. On the prehistory of programmable machines: musical automata, looms, calculators. Mechanism and Machine theory, 36(5), pp.589-603.\n\n---",
+      "metadata": {
+        "extension": "md"
+      }
+    },
+    {
+      "id": "sources-books-md",
+      "path": "sources/Books.md",
+      "title": "Books.md",
+      "kind": "markdown",
+      "sourceType": "book",
+      "mimeType": "text/markdown",
+      "sizeBytes": 235,
+      "searchText": "# Books\n\n## 2026-05-15 23:09\n\nType: book\n\nFile: [Robinson, C (ed) - The New Cambridge History of Islam – Vol 1.pdf](files/book/20260515-230952-Robinson-C-ed---The-New-Cambridge-History-of-Islam-Vol-1.pdf)\n\nUploaded source file.\n\n---",
+      "metadata": {
+        "extension": "md"
+      }
+    },
+    {
+      "id": "sources-claims-md",
+      "path": "sources/Claims.md",
+      "title": "Claims.md",
+      "kind": "markdown",
+      "sourceType": "claim",
+      "mimeType": "text/markdown",
+      "sizeBytes": 43,
+      "searchText": "# Claims\n\n- [ ] Claims that need evidence.",
+      "metadata": {
+        "extension": "md"
+      }
+    },
+    {
+      "id": "sources-papers-md",
+      "path": "sources/Papers.md",
+      "title": "Papers.md",
+      "kind": "markdown",
+      "sourceType": "paper",
+      "mimeType": "text/markdown",
+      "sizeBytes": 9,
+      "searchText": "# Papers",
+      "metadata": {
+        "extension": "md"
+      }
+    },
+    {
+      "id": "sources-quotes-md",
+      "path": "sources/Quotes.md",
+      "title": "Quotes.md",
+      "kind": "markdown",
+      "sourceType": "quote",
+      "mimeType": "text/markdown",
+      "sizeBytes": 9,
+      "searchText": "# Quotes",
+      "metadata": {
+        "extension": "md"
+      }
+    },
+    {
+      "id": "sources-raw-md",
+      "path": "sources/raw.md",
+      "title": "raw.md",
+      "kind": "markdown",
+      "sourceType": "raw",
+      "mimeType": "text/markdown",
+      "sizeBytes": 786,
+      "searchText": "# Raw Sources\n\n## 2026-05-14 22:26\n\nType: article\n\nhttps://hyperallergic.com/the-9th-century-islamic-instrument-which-plays-by-itself/\n\n---\n\n## 2026-05-14 22:26\n\nType: article\n\nhttps://en.wikipedia.org/wiki/Ban%C5%AB_M%C5%ABs%C4%81_brothers\n\n---\n\n## 2026-05-14 22:27\n\nType: article\n\nhttps://en.wikipedia.org/wiki/Book_of_Ingenious_Devices#cite_note-Koetsier-21\n\n---\n\n## 2026-05-14 22:28\n\nType: article\n\nKoetsier, T., 2001. On the prehistory of programmable machines: musical automata, looms, calculators. Mechanism and Machine theory, 36(5), pp.589-603.\n\n---\n\n## 2026-05-15 23:09\n\nType: book\n\nFile: [Robinson, C (ed) - The New Cambridge History of Islam – Vol 1.pdf](files/book/20260515-230952-Robinson-C-ed---The-New-Cambridge-History-of-Islam-Vol-1.pdf)\n\nUploaded source file.\n\n---",
+      "metadata": {
+        "extension": "md"
+      }
+    },
+    {
+      "id": "sources-files-book-20260515-230952-robinson-c-ed-the-new-cambridge-history-of-islam-vol-1-pdf",
+      "path": "sources/files/book/20260515-230952-Robinson-C-ed---The-New-Cambridge-History-of-Islam-Vol-1.pdf",
+      "title": "Robinson-C-ed---The-New-Cambridge-History-of-Islam-Vol-1.pdf",
+      "kind": "upload",
+      "sourceType": "book",
+      "mimeType": "application/pdf",
+      "sizeBytes": 37015183,
+      "searchText": "Uploaded source file 20260515 230952 Robinson C ed The New Cambridge History of Islam Vol 1.pdf stored at sources/files/book/20260515-230952-Robinson-C-ed---The-New-Cambridge-History-of-Islam-Vol-1.pdf",
+      "metadata": {
+        "extension": "pdf",
+        "extractedText": false,
+        "extraction": "metadata-only"
+      }
+    }
+  ],
+  "chunks": [
+    {
+      "id": "sources-articles-md:chunk:0",
+      "documentId": "sources-articles-md",
+      "chunkIndex": 0,
+      "path": "sources/Articles.md",
+      "sourceType": "article",
+      "page": "index",
+      "text": "https://en.wikipedia.org/wiki/Ban%C5%AB_M%C5%ABs%C4%81_brothers",
+      "metadata": {
+        "extension": "md",
+        "kind": "markdown",
+        "title": "Articles.md"
+      }
+    },
+    {
+      "id": "sources-articles-md:chunk:1",
+      "documentId": "sources-articles-md",
+      "chunkIndex": 1,
+      "path": "sources/Articles.md",
+      "sourceType": "article",
+      "page": "index",
+      "text": "https://en.wikipedia.org/wiki/Book_of_Ingenious_Devices#cite_note-Koetsier-21",
+      "metadata": {
+        "extension": "md",
+        "kind": "markdown",
+        "title": "Articles.md"
+      }
+    },
+    {
+      "id": "sources-articles-md:chunk:2",
+      "documentId": "sources-articles-md",
+      "chunkIndex": 2,
+      "path": "sources/Articles.md",
+      "sourceType": "article",
+      "page": "index",
+      "text": "Koetsier, T., 2001. On the prehistory of programmable machines: musical automata, looms, calculators. Mechanism and Machine theory, 36(5), pp.589-603.\n\n---",
+      "metadata": {
+        "extension": "md",
+        "kind": "markdown",
+        "title": "Articles.md"
+      }
+    },
+    {
+      "id": "sources-books-md:chunk:0",
+      "documentId": "sources-books-md",
+      "chunkIndex": 0,
+      "path": "sources/Books.md",
+      "sourceType": "book",
+      "page": "index",
+      "text": "# Books\n\nFile: [Robinson, C (ed) - The New Cambridge History of Islam – Vol 1.pdf](files/book/20260515-230952-Robinson-C-ed---The-New-Cambridge-History-of-Islam-Vol-1.pdf)\n\nUploaded source file.\n\n---",
+      "metadata": {
+        "extension": "md",
+        "kind": "markdown",
+        "title": "Books.md"
+      }
+    },
+    {
+      "id": "sources-claims-md:chunk:0",
+      "documentId": "sources-claims-md",
+      "chunkIndex": 0,
+      "path": "sources/Claims.md",
+      "sourceType": "claim",
+      "page": "index",
+      "text": "Claims that need evidence.",
+      "metadata": {
+        "extension": "md",
+        "kind": "markdown",
+        "title": "Claims.md"
+      }
+    },
+    {
+      "id": "sources-papers-md:chunk:0",
+      "documentId": "sources-papers-md",
+      "chunkIndex": 0,
+      "path": "sources/Papers.md",
+      "sourceType": "paper",
+      "page": "index",
+      "text": "# Papers",
+      "metadata": {
+        "extension": "md",
+        "kind": "markdown",
+        "title": "Papers.md"
+      }
+    },
+    {
+      "id": "sources-quotes-md:chunk:0",
+      "documentId": "sources-quotes-md",
+      "chunkIndex": 0,
+      "path": "sources/Quotes.md",
+      "sourceType": "quote",
+      "page": "index",
+      "text": "# Quotes",
+      "metadata": {
+        "extension": "md",
+        "kind": "markdown",
+        "title": "Quotes.md"
+      }
+    },
+    {
+      "id": "sources-raw-md:chunk:0",
+      "documentId": "sources-raw-md",
+      "chunkIndex": 0,
+      "path": "sources/raw.md",
+      "sourceType": "article",
+      "page": "index",
+      "text": "https://en.wikipedia.org/wiki/Ban%C5%AB_M%C5%ABs%C4%81_brothers",
+      "metadata": {
+        "extension": "md",
+        "kind": "markdown",
+        "title": "raw.md"
+      }
+    },
+    {
+      "id": "sources-raw-md:chunk:1",
+      "documentId": "sources-raw-md",
+      "chunkIndex": 1,
+      "path": "sources/raw.md",
+      "sourceType": "article",
+      "page": "index",
+      "text": "https://en.wikipedia.org/wiki/Book_of_Ingenious_Devices#cite_note-Koetsier-21",
+      "metadata": {
+        "extension": "md",
+        "kind": "markdown",
+        "title": "raw.md"
+      }
+    },
+    {
+      "id": "sources-raw-md:chunk:2",
+      "documentId": "sources-raw-md",
+      "chunkIndex": 2,
+      "path": "sources/raw.md",
+      "sourceType": "article",
+      "page": "index",
+      "text": "Koetsier, T., 2001. On the prehistory of programmable machines: musical automata, looms, calculators. Mechanism and Machine theory, 36(5), pp.589-603.",
+      "metadata": {
+        "extension": "md",
+        "kind": "markdown",
+        "title": "raw.md"
+      }
+    },
+    {
+      "id": "sources-raw-md:chunk:3",
+      "documentId": "sources-raw-md",
+      "chunkIndex": 3,
+      "path": "sources/raw.md",
+      "sourceType": "book",
+      "page": "index",
+      "text": "File: [Robinson, C (ed) - The New Cambridge History of Islam – Vol 1.pdf](files/book/20260515-230952-Robinson-C-ed---The-New-Cambridge-History-of-Islam-Vol-1.pdf)\n\nUploaded source file.\n\n---",
+      "metadata": {
+        "extension": "md",
+        "kind": "markdown",
+        "title": "raw.md"
+      }
+    },
+    {
+      "id": "sources-files-book-20260515-230952-robinson-c-ed-the-new-cambridge-history-of-islam-vol-1-pdf:chunk:0",
+      "documentId": "sources-files-book-20260515-230952-robinson-c-ed-the-new-cambridge-history-of-islam-vol-1-pdf",
+      "chunkIndex": 0,
+      "path": "sources/files/book/20260515-230952-Robinson-C-ed---The-New-Cambridge-History-of-Islam-Vol-1.pdf",
+      "sourceType": "book",
+      "page": "file",
+      "text": "Uploaded source file 20260515 230952 Robinson C ed The New Cambridge History of Islam Vol 1.pdf stored at sources/files/book/20260515-230952-Robinson-C-ed---The-New-Cambridge-History-of-Islam-Vol-1.pdf",
+      "metadata": {
+        "extension": "pdf",
+        "extractedText": false,
+        "extraction": "metadata-only",
+        "kind": "upload",
+        "title": "Robinson-C-ed---The-New-Cambridge-History-of-Islam-Vol-1.pdf"
+      }
+    }
+  ]
+}

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import {
   deleteBookFile,
   readAllMarkdownFiles,
+  readBinaryBookFile,
   readBookFile,
   renameBookFile,
   writeBookFile,
@@ -14,13 +15,26 @@ function joined(parts: string[]) {
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   context: { params: Promise<{ bookId: string; path: string[] }> },
 ) {
   const { bookId, path } = await context.params;
   const storage = getServerStorage();
   const filePath = joined(path);
+  const wantsRawFile = new URL(request.url).searchParams.get("raw") === "1";
   try {
+    if (wantsRawFile && filePath.startsWith("sources/files/")) {
+      const content = await readBinaryBookFile(storage, bookId, filePath);
+      const body = new ArrayBuffer(content.byteLength);
+      new Uint8Array(body).set(content);
+      return new Response(body, {
+        headers: {
+          "Content-Type": mimeTypeForPath(filePath),
+          "Content-Disposition": `inline; filename="${safeFileName(filePath)}"`,
+          "Content-Length": String(content.byteLength),
+        },
+      });
+    }
     const content = await readBookFile(storage, bookId, filePath);
     const corpus = await readAllMarkdownFiles(storage, bookId);
     return NextResponse.json({
@@ -30,6 +44,32 @@ export async function GET(
     });
   } catch {
     return NextResponse.json({ error: "File not found" }, { status: 404 });
+  }
+}
+
+function safeFileName(filePath: string) {
+  return (filePath.split("/").at(-1) ?? "source").replace(/["\\]/g, "");
+}
+
+function mimeTypeForPath(filePath: string) {
+  const extension = filePath.split(".").at(-1)?.toLowerCase();
+  switch (extension) {
+    case "pdf":
+      return "application/pdf";
+    case "md":
+      return "text/markdown; charset=utf-8";
+    case "txt":
+    case "text":
+    case "log":
+      return "text/plain; charset=utf-8";
+    case "csv":
+      return "text/csv; charset=utf-8";
+    case "json":
+      return "application/json; charset=utf-8";
+    case "xml":
+      return "application/xml; charset=utf-8";
+    default:
+      return "application/octet-stream";
   }
 }
 

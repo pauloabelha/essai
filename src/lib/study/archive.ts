@@ -4,6 +4,7 @@ import { bookRoot } from "@/lib/projects/service";
 import {
   readOrRefreshStudySourceIndex,
   type StudyIndexChunk,
+  type StudySourceIndex,
 } from "@/lib/study/source-index";
 import type { StorageProvider } from "@/lib/storage/types";
 
@@ -50,11 +51,23 @@ export interface StudyInvestigation {
   conceptualEchoes: string[];
   claims: StudyPassage[];
   relatedObjects: StudyObject[];
+  selectedSource: StudySelectedSource | null;
   graph: {
     nodes: StudyGraphNode[];
     links: StudyGraphLink[];
   };
   auditLog: string[];
+}
+
+export interface StudySelectedSource {
+  path: string;
+  title: string;
+  kind: "markdown" | "upload";
+  sourceType: string;
+  mimeType: string;
+  sizeBytes: number;
+  text: string;
+  extraction: string;
 }
 
 const SEMANTIC_NEIGHBORS: Record<string, string[]> = {
@@ -117,19 +130,30 @@ export async function buildStudyInvestigation(
   const sourceFiles = files
     .map((file) => cleanPath(file.path))
     .filter((path) => path.startsWith("sources/"));
+  const uploadedFiles = sourceFiles.filter((path) =>
+    path.startsWith("sources/files/"),
+  );
   const sourceMarkdown = sourceFiles.filter(
     (path) =>
       path.endsWith(".md") &&
       (!selectedSources.size || selectedSources.has(path)),
   );
-  const uploadedFiles = sourceFiles.filter((path) =>
-    path.startsWith("sources/files/"),
+  const selectedUploadedFiles = uploadedFiles.filter((path) =>
+    selectedSources.has(path),
   );
   const index = await readOrRefreshStudySourceIndex(storage, bookId);
+  const selectedSource =
+    selectedSources.size === 1
+      ? selectedSourceFromIndex(index, [...selectedSources][0])
+      : null;
   const chunks = index.chunks.filter(
     (chunk) =>
       sourceMarkdown.includes(chunk.path) ||
-      (!selectedSources.size && chunk.path.startsWith("sources/files/")),
+      (!selectedSources.size && chunk.path.startsWith("sources/files/")) ||
+      selectedUploadedFiles.includes(chunk.path) ||
+      (!selectedSources.size && chunk.path === "notes.md") ||
+      (chunk.path === "notes.md" &&
+        selectedSources.has(String(chunk.metadata.sourcePath ?? ""))),
   );
   const claims = chunks.filter((chunk) => chunk.path === "sources/Claims.md");
   const objectFiles = files
@@ -169,7 +193,9 @@ export async function buildStudyInvestigation(
     sourceCoverage: {
       sources: sourceMarkdown.length,
       chunks: chunks.length,
-      files: uploadedFiles.length,
+      files: selectedSources.size
+        ? selectedUploadedFiles.length
+        : uploadedFiles.length,
       scope: exhaustive
         ? selectedSources.size
           ? `Exhaustive scholarly audit across ${selectedSources.size} selected source index${selectedSources.size === 1 ? "" : "es"}`
@@ -182,6 +208,7 @@ export async function buildStudyInvestigation(
     conceptualEchoes,
     claims: claimReferences,
     relatedObjects,
+    selectedSource,
     graph: buildGraph(query, directReferences, claimReferences, relatedObjects),
     auditLog: [
       `Read ${sourceMarkdown.length} Markdown index${sourceMarkdown.length === 1 ? "" : "es"} from /sources.`,
@@ -190,6 +217,24 @@ export async function buildStudyInvestigation(
       `Study index refreshed at ${index.updatedAt}.`,
       `Connected ${relatedObjects.length} related object records from /objects.`,
     ],
+  };
+}
+
+function selectedSourceFromIndex(
+  index: StudySourceIndex,
+  path: string,
+): StudySelectedSource | null {
+  const document = index.documents.find((item) => item.path === path);
+  if (!document) return null;
+  return {
+    path: document.path,
+    title: document.title,
+    kind: document.kind,
+    sourceType: document.sourceType,
+    mimeType: document.mimeType,
+    sizeBytes: document.sizeBytes,
+    text: document.searchText,
+    extraction: String(document.metadata.extraction ?? "markdown"),
   };
 }
 
@@ -242,7 +287,10 @@ function passageFromChunk(
   return {
     id: chunk.id,
     quote: excerptFor(chunk.text, semanticTerms(query)),
-    sourceFile: chunk.path,
+    sourceFile:
+      chunk.sourceType === "note" && chunk.metadata.sourcePath
+        ? String(chunk.metadata.sourcePath)
+        : chunk.path,
     sourceType: chunk.sourceType,
     page: chunk.page,
     confidence: score > 4 ? "High" : score > 1.5 ? "Medium" : "Low",

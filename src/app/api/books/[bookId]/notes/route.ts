@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { appendNote } from "@/lib/projects/notes";
+import { appendNote, type NoteSourceReference } from "@/lib/projects/notes";
 import { getServerStorage } from "@/lib/storage/server";
 
 export async function POST(
@@ -7,11 +7,20 @@ export async function POST(
   context: { params: Promise<{ bookId: string }> },
 ) {
   const { bookId } = await context.params;
-  const body = (await request.json()) as { note?: string };
+  const body = (await request.json()) as {
+    note?: string;
+    source?: NoteSourceReference;
+  };
   if (!body.note?.trim()) {
     return NextResponse.json({ error: "Note is required" }, { status: 400 });
   }
   return NextResponse.json(
-    await appendNote(getServerStorage(), bookId, body.note),
+    await appendNote(
+      getServerStorage(),
+      bookId,
+      body.note,
+      new Date(),
+      body.source,
+    ),
   );
 }

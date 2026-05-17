@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-test("create project, capture notes and sources, write, focus, read, and navigate wiki links", async ({
+test("create project, capture notes and sources, write, preview, and navigate wiki links", async ({
   page,
   request,
 }) => {
@@ -42,23 +42,6 @@ test("create project, capture notes and sources, write, focus, read, and navigat
   await page.getByLabel("Sources input").fill("https://example.com/source");
   await page.getByRole("button", { name: "Commit" }).click();
   await expect(page.getByText("Source saved.")).toBeVisible();
-  await page.getByRole("button", { name: "Study" }).click();
-  await page.getByRole("button", { name: "raw.md" }).click();
-  await page.getByLabel("Study search").fill("example source");
-  await expect(page.locator(".app-frame")).toHaveClass(/study-active/);
-  await expect(
-    page.getByRole("complementary", { name: "Input" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: "Direct References" }),
-  ).toBeVisible();
-  const directReferences = page.locator(".study-section").filter({
-    has: page.getByRole("heading", { name: "Direct References" }),
-  });
-  await expect(directReferences).toContainText("https://example.com/source", {
-    timeout: 10_000,
-  });
-  await page.getByRole("button", { name: "Write" }).click();
   await page.getByLabel("Source file").setInputFiles({
     name: "sample-notes.txt",
     mimeType: "text/plain",
@@ -66,6 +49,21 @@ test("create project, capture notes and sources, write, focus, read, and navigat
   });
   await page.getByRole("button", { name: "Upload File" }).click();
   await expect(page.getByText("File saved.")).toBeVisible();
+  await page.getByRole("button", { name: "Study" }).click();
+  await page.getByRole("button", { name: /sample-notes/i }).click();
+  await page.getByLabel("Search current source").fill("source notes");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".app-frame")).toHaveClass(/study-active/);
+  await expect(
+    page.getByRole("complementary", { name: "Input" }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: /sample-notes/i }),
+  ).toBeVisible();
+  await expect(
+    page.frameLocator(".source-text-viewer").locator("body"),
+  ).toContainText("source notes", { timeout: 10_000 });
+  await page.getByRole("button", { name: "Write" }).click();
   const rawSource = (await (
     await request.get(`/api/books/${book.id}/files/sources/raw.md`)
   ).json()) as { content: string };
@@ -99,13 +97,7 @@ test("create project, capture notes and sources, write, focus, read, and navigat
     process.platform === "darwin" ? "Meta+." : "Control+.",
   );
 
-  await page
-    .getByLabel("Writing mode")
-    .getByRole("button", { name: "Read" })
-    .click();
-  await expect(page.locator(".prose-reading")).toContainText(
-    "A sentence about",
-  );
+  await page.getByRole("button", { name: "Preview" }).click();
   await page.getByRole("button", { name: "music-cylinder" }).click();
   await expect(page.getByText("objects/music-cylinder.md")).toBeVisible();
 });

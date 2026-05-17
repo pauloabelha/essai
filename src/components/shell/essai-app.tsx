@@ -5,11 +5,11 @@ import { useRouter } from "next/navigation";
 import type { CSSProperties, Dispatch, RefObject, SetStateAction } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  BookOpen,
   GitBranch,
   Maximize2,
   Moon,
   Plus,
+  Search,
   Save,
   SplitSquareHorizontal,
   Sun,
@@ -19,7 +19,6 @@ import { useTheme } from "next-themes";
 import { MarkdownView } from "@/components/reading/markdown-view";
 import type { AiSuggestion } from "@/lib/ai/types";
 import { expandSlashCommand, slashSnippets } from "@/lib/editor/slash";
-import { countNoteBlocks } from "@/lib/projects/notes";
 import type { BookMetadata, ManuscriptSection } from "@/lib/projects/templates";
 import type { FileNode } from "@/lib/storage/types";
 
@@ -32,7 +31,7 @@ const MarkdownEditor = dynamic(
 );
 
 type SaveState = "saved" | "dirty" | "saving";
-type ViewMode = "write" | "preview" | "read" | "study";
+type ViewMode = "write" | "preview" | "study";
 
 interface LoadedFile {
   path: string;
@@ -59,6 +58,16 @@ interface StudyInvestigation {
   conceptualEchoes: string[];
   claims: StudyPassage[];
   relatedObjects: Array<{ path: string; title: string; excerpt: string }>;
+  selectedSource: {
+    path: string;
+    title: string;
+    kind: "markdown" | "upload";
+    sourceType: string;
+    mimeType: string;
+    sizeBytes: number;
+    text: string;
+    extraction: string;
+  } | null;
   graph: {
     nodes: Array<{
       id: string;
@@ -109,15 +118,18 @@ export function EssaiApp({
   const [sourceInput, setSourceInput] = useState("");
   const [pdfFile, setPdfFile] = useState<File | null>(null);
   const [captureStatus, setCaptureStatus] = useState("");
-  const [notesCount, setNotesCount] = useState(0);
   const [studyQuery, setStudyQuery] = useState("programmable machines");
-  const [studyExhaustive, setStudyExhaustive] = useState(true);
+  const studyExhaustive = true;
   const [studySelectedSources, setStudySelectedSources] = useState<string[]>(
     [],
   );
+  const [studySourceReadAt, setStudySourceReadAt] = useState<
+    Record<string, number>
+  >({});
   const [studyInvestigation, setStudyInvestigation] =
     useState<StudyInvestigation | null>(null);
   const [studyLoading, setStudyLoading] = useState(false);
+  const studyReadOrderLoadedRef = useRef(false);
   const noteInputRef = useRef<HTMLTextAreaElement | null>(null);
   const pdfInputRef = useRef<HTMLInputElement | null>(null);
   const { theme, setTheme } = useTheme();
@@ -195,12 +207,12 @@ export function EssaiApp({
   }, []);
 
   const focusNotes = useCallback(() => {
-    if (noteInputRef.current && !focusMode && viewMode !== "read") {
+    if (noteInputRef.current && !focusMode) {
       noteInputRef.current.focus();
       return;
     }
     setNotesCaptureOpen(true);
-  }, [focusMode, viewMode]);
+  }, [focusMode]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -217,7 +229,7 @@ export function EssaiApp({
       }
       if (key === "r") {
         event.preventDefault();
-        setViewMode((mode) => (mode === "read" ? "write" : "read"));
+        setViewMode((mode) => (mode === "preview" ? "write" : "preview"));
       }
       if (key === ".") {
         event.preventDefault();
@@ -247,30 +259,62 @@ export function EssaiApp({
   const hasCurrentNotes = allFiles.some((file) =>
     file.path.endsWith("/notes.md"),
   );
-  const archiveFiles = allFiles
-    .map((file) => cleanProjectPath(file.path, bookId))
-    .filter((path) => path.startsWith("sources/"));
-  const studySourceFiles = archiveFiles.filter((path) => path.endsWith(".md"));
-  const objectFiles = allFiles
-    .map((file) => cleanProjectPath(file.path, bookId))
-    .filter((path) => path.startsWith("objects/") && path.endsWith(".md"));
+  const archiveFiles = useMemo(
+    () =>
+      allFiles
+        .map((file) => cleanProjectPath(file.path, bookId))
+        .filter((path) => path.startsWith("sources/")),
+    [allFiles, bookId],
+  );
+  const studySourceFiles = useMemo(
+    () => sortStudySources(archiveFiles, studySourceReadAt),
+    [archiveFiles, studySourceReadAt],
+  );
 
   useEffect(() => {
-    if (!bookId || !hasCurrentNotes) {
-      setNotesCount(0);
+    studyReadOrderLoadedRef.current = false;
+    if (!bookId) {
+      setStudySourceReadAt({});
       return;
     }
-    fetch(`/api/books/${bookId}/files/${encodeURIComponentPath("notes.md")}`)
-      .then((response) => (response.ok ? response.json() : null))
-      .then((file: LoadedFile | null) => {
-        if (file) setNotesCount(countNoteBlocks(file.content));
-      });
-  }, [bookId, hasCurrentNotes, files]);
+    try {
+      setStudySourceReadAt(
+        JSON.parse(
+          window.localStorage.getItem(studyReadOrderKey(bookId)) ?? "{}",
+        ) as Record<string, number>,
+      );
+    } catch {
+      setStudySourceReadAt({});
+    } finally {
+      studyReadOrderLoadedRef.current = true;
+    }
+  }, [bookId]);
 
   useEffect(() => {
-    if (!bookId || viewMode !== "study") return;
-    const controller = new AbortController();
-    const handle = window.setTimeout(async () => {
+    if (!bookId || !studyReadOrderLoadedRef.current) return;
+    window.localStorage.setItem(
+      studyReadOrderKey(bookId),
+      JSON.stringify(studySourceReadAt),
+    );
+  }, [bookId, studySourceReadAt]);
+
+  useEffect(() => {
+    if (viewMode !== "study" || !studyReadOrderLoadedRef.current) return;
+    if (!studySourceFiles.length) {
+      setStudySelectedSources([]);
+      return;
+    }
+    setStudySelectedSources((selected) => {
+      if (selected.length === 1 && studySourceFiles.includes(selected[0])) {
+        return selected;
+      }
+      return [studySourceFiles[0]];
+    });
+  }, [studySourceFiles, viewMode]);
+
+  const loadStudyInvestigation = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!bookId) return;
       setStudyLoading(true);
       try {
         const params = new URLSearchParams({
@@ -279,7 +323,7 @@ export function EssaiApp({
         });
         studySelectedSources.forEach((path) => params.append("source", path));
         const response = await fetch(`/api/books/${bookId}/study?${params}`, {
-          signal: controller.signal,
+          signal,
         });
         if (response.ok) {
           setStudyInvestigation((await response.json()) as StudyInvestigation);
@@ -287,8 +331,17 @@ export function EssaiApp({
       } catch {
         // Typing a new inquiry cancels the previous archival pass.
       } finally {
-        if (!controller.signal.aborted) setStudyLoading(false);
+        if (!signal?.aborted) setStudyLoading(false);
       }
+    },
+    [bookId, studyExhaustive, studyQuery, studySelectedSources],
+  );
+
+  useEffect(() => {
+    if (!bookId || viewMode !== "study") return;
+    const controller = new AbortController();
+    const handle = window.setTimeout(() => {
+      void loadStudyInvestigation(controller.signal);
     }, 220);
     return () => {
       controller.abort();
@@ -297,9 +350,7 @@ export function EssaiApp({
   }, [
     bookId,
     files,
-    studyExhaustive,
-    studyQuery,
-    studySelectedSources,
+    loadStudyInvestigation,
     viewMode,
   ]);
 
@@ -353,21 +404,60 @@ export function EssaiApp({
 
   async function commitNote() {
     if (!bookId || !noteInput.trim()) return;
+    const activeStudySource =
+      viewMode === "study" && studySelectedSources.length === 1
+        ? studyInvestigation?.selectedSource
+        : null;
     const response = await fetch(`/api/books/${bookId}/notes`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note: noteInput }),
+      body: JSON.stringify({
+        note: noteInput,
+        source: activeStudySource
+          ? {
+              path: activeStudySource.path,
+              title: activeStudySource.title,
+            }
+          : undefined,
+      }),
     });
-    const result = (await response.json()) as { count: number };
-    setNotesCount(result.count);
+    await response.json();
     setNoteInput("");
-    setCaptureStatus("Captured.");
+    setCaptureStatus(activeStudySource ? "Captured with source." : "Captured.");
     await loadFiles();
     if (openPath === "notes.md") {
       await loadFile(openPath);
     }
     if (notesCaptureOpen) setNotesCaptureOpen(false);
     window.requestAnimationFrame(() => noteInputRef.current?.focus());
+    window.setTimeout(() => setCaptureStatus(""), 1600);
+  }
+
+  async function commitSourceSelectionNote(
+    source: NonNullable<StudyInvestigation["selectedSource"]>,
+    quote: string,
+  ) {
+    const selectedText = quote.trim();
+    if (!bookId || !selectedText) {
+      setCaptureStatus("Select source text first.");
+      window.setTimeout(() => setCaptureStatus(""), 1600);
+      return;
+    }
+    await fetch(`/api/books/${bookId}/notes`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        note: selectedText,
+        source: {
+          path: source.path,
+          title: source.title,
+          quote: selectedText,
+        },
+      }),
+    });
+    setCaptureStatus("Source note captured.");
+    await loadFiles();
+    if (openPath === "notes.md") await loadFile(openPath);
     window.setTimeout(() => setCaptureStatus(""), 1600);
   }
 
@@ -437,6 +527,11 @@ export function EssaiApp({
     if (result) updateManuscriptSections(result);
   }
 
+  function renameManuscriptSection(sectionId: string, title: string) {
+    const result = renameSectionTitle(manuscriptSections, sectionId, title);
+    if (result) updateManuscriptSections(result);
+  }
+
   async function askAi(kind: string) {
     const response = await fetch("/api/ai", {
       method: "POST",
@@ -453,6 +548,14 @@ export function EssaiApp({
   function onDraftChange(value: string) {
     setDraft(expandSlashCommand(value));
     setSaveState("dirty");
+  }
+
+  function selectStudySource(path: string) {
+    setStudySelectedSources([path]);
+    setStudySourceReadAt((current) => ({
+      ...current,
+      [path]: Date.now(),
+    }));
   }
 
   function openWikiTarget(target: string) {
@@ -501,7 +604,6 @@ export function EssaiApp({
     <main
       className={[
         "app-frame",
-        viewMode === "read" ? "reading-active" : "",
         viewMode === "study" ? "study-active" : "",
         focusMode ? "focus-active" : "",
       ]
@@ -510,30 +612,12 @@ export function EssaiApp({
     >
       {viewMode === "study" && !focusMode ? (
         <StudySidebar
-          archiveFiles={archiveFiles}
-          sourceFiles={studySourceFiles}
+          sources={studySourceFiles}
           selectedSources={studySelectedSources}
-          objectFiles={objectFiles}
-          notesCount={notesCount}
           investigation={studyInvestigation}
-          onOpenFile={(path) => {
-            setViewMode("preview");
-            loadFile(path);
-          }}
-          onStudyConcept={(concept) => {
-            setStudyQuery(concept);
-            setViewMode("study");
-          }}
-          onToggleSource={(path) =>
-            setStudySelectedSources((selected) =>
-              selected.includes(path)
-                ? selected.filter((source) => source !== path)
-                : [...selected, path],
-            )
-          }
-          onClearSources={() => setStudySelectedSources([])}
+          onSelectSource={selectStudySource}
         />
-      ) : viewMode !== "read" && !focusMode ? (
+      ) : !focusMode ? (
         <aside className="left-pane" aria-label="Manuscript sections">
           <div className="brand-row">
             <div>
@@ -563,6 +647,7 @@ export function EssaiApp({
             activePath={openPath}
             onOpen={loadFile}
             onMove={moveManuscriptSection}
+            onRename={renameManuscriptSection}
           />
         </aside>
       ) : null}
@@ -596,14 +681,6 @@ export function EssaiApp({
               </button>
               <button
                 className={
-                  viewMode === "read" ? "active read-mode" : "read-mode"
-                }
-                onClick={() => setViewMode("read")}
-              >
-                Read
-              </button>
-              <button
-                className={
                   viewMode === "study" ? "active study-mode" : "study-mode"
                 }
                 onClick={() => setViewMode("study")}
@@ -626,14 +703,6 @@ export function EssaiApp({
               <Maximize2 size={16} />
             </button>
             <button
-              className="read-button"
-              onClick={() =>
-                setViewMode(viewMode === "read" ? "write" : "read")
-              }
-            >
-              <BookOpen size={16} /> Read
-            </button>
-            <button
               aria-label={theme === "dark" ? "Light mode" : "Dark mode"}
               title={theme === "dark" ? "Light mode" : "Dark mode"}
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
@@ -643,22 +712,21 @@ export function EssaiApp({
           </div>
         </header>
 
-        {viewMode === "read" ? (
-          <MarkdownView markdown={draft} reading onWikiClick={openWikiTarget} />
-        ) : viewMode === "study" ? (
+        {viewMode === "study" ? (
           <StudySurface
+            bookId={bookId}
             query={studyQuery}
-            exhaustive={studyExhaustive}
             selectedSources={studySelectedSources}
             loading={studyLoading}
             investigation={studyInvestigation}
             onQueryChange={setStudyQuery}
-            onExhaustiveChange={setStudyExhaustive}
+            onSearchSubmit={() => void loadStudyInvestigation()}
             onOpenFile={(path) => {
               setViewMode("preview");
               loadFile(path);
             }}
             onStudyConcept={setStudyQuery}
+            onSourceSelectionNote={commitSourceSelectionNote}
           />
         ) : (
           <div
@@ -674,7 +742,7 @@ export function EssaiApp({
         )}
       </section>
 
-      {viewMode !== "read" && viewMode !== "study" && !focusMode ? (
+      {viewMode !== "study" && !focusMode ? (
         <aside className="right-pane" aria-label="Input">
           <InputPane
             noteValue={noteInput}
@@ -712,7 +780,7 @@ export function EssaiApp({
         </aside>
       ) : null}
 
-      {viewMode !== "read" && viewMode !== "study" ? (
+      {viewMode !== "study" ? (
         <button className="floating-notes" onClick={focusNotes}>
           <Plus size={18} /> Notes
         </button>
@@ -738,7 +806,6 @@ export function EssaiApp({
           onCommand={(command) => {
             setCommandOpen(false);
             if (command === "save") saveFile();
-            if (command === "read") setViewMode("read");
             if (command === "write") setViewMode("write");
             if (command === "preview") setViewMode("preview");
             if (command === "study") setViewMode("study");
@@ -864,11 +931,13 @@ function SectionTree({
   activePath,
   onOpen,
   onMove,
+  onRename,
 }: {
   sections: ManuscriptSection[];
   activePath: string;
   onOpen: (path: string) => void;
   onMove: (dragId: string, targetId: string) => void;
+  onRename: (sectionId: string, title: string) => void;
 }) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   return (
@@ -885,6 +954,7 @@ function SectionTree({
           depth={0}
           onOpen={onOpen}
           onMove={onMove}
+          onRename={onRename}
           onDragStart={setDraggingId}
           onDragEnd={() => setDraggingId(null)}
         />
@@ -900,6 +970,7 @@ function SectionTreeItem({
   depth,
   onOpen,
   onMove,
+  onRename,
   onDragStart,
   onDragEnd,
 }: {
@@ -909,9 +980,29 @@ function SectionTreeItem({
   depth: number;
   onOpen: (path: string) => void;
   onMove: (dragId: string, targetId: string) => void;
+  onRename: (sectionId: string, title: string) => void;
   onDragStart: (id: string) => void;
   onDragEnd: () => void;
 }) {
+  const [editing, setEditing] = useState(false);
+  const [draftTitle, setDraftTitle] = useState(section.title);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!editing) return;
+    setDraftTitle(section.title);
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.select();
+    });
+  }, [editing, section.title]);
+
+  function commitRename() {
+    const title = draftTitle.trim();
+    setEditing(false);
+    if (title && title !== section.title) onRename(section.id, title);
+  }
+
   return (
     <div className="section-tree-node">
       <div
@@ -934,20 +1025,39 @@ function SectionTreeItem({
           onDragEnd();
         }}
       >
-        <button
-          type="button"
-          draggable
-          className="section-open-button"
-          onClick={() => onOpen(section.path)}
-          onDragStart={(event) => {
-            event.dataTransfer.effectAllowed = "move";
-            event.dataTransfer.setData("text/plain", section.id);
-            onDragStart(section.id);
-          }}
-          onDragEnd={onDragEnd}
-        >
-          <span>{section.title}</span>
-        </button>
+        {editing ? (
+          <input
+            ref={inputRef}
+            className="section-title-input"
+            aria-label="Section title"
+            value={draftTitle}
+            onChange={(event) => setDraftTitle(event.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") commitRename();
+              if (event.key === "Escape") setEditing(false);
+            }}
+          />
+        ) : (
+          <button
+            type="button"
+            draggable
+            className="section-open-button"
+            onClick={() => onOpen(section.path)}
+            onDoubleClick={(event) => {
+              event.preventDefault();
+              setEditing(true);
+            }}
+            onDragStart={(event) => {
+              event.dataTransfer.effectAllowed = "move";
+              event.dataTransfer.setData("text/plain", section.id);
+              onDragStart(section.id);
+            }}
+            onDragEnd={onDragEnd}
+          >
+            <span>{section.title}</span>
+          </button>
+        )}
       </div>
       {section.children?.length ? (
         <div className="section-tree-children">
@@ -960,6 +1070,7 @@ function SectionTreeItem({
               depth={depth + 1}
               onOpen={onOpen}
               onMove={onMove}
+              onRename={onRename}
               onDragStart={onDragStart}
               onDragEnd={onDragEnd}
             />
@@ -971,163 +1082,124 @@ function SectionTreeItem({
 }
 
 function StudySidebar({
-  archiveFiles,
-  sourceFiles,
+  sources,
   selectedSources,
-  objectFiles,
-  notesCount,
   investigation,
-  onOpenFile,
-  onStudyConcept,
-  onToggleSource,
-  onClearSources,
+  onSelectSource,
 }: {
-  archiveFiles: string[];
-  sourceFiles: string[];
+  sources: string[];
   selectedSources: string[];
-  objectFiles: string[];
-  notesCount: number;
   investigation: StudyInvestigation | null;
-  onOpenFile: (path: string) => void;
-  onStudyConcept: (concept: string) => void;
-  onToggleSource: (path: string) => void;
-  onClearSources: () => void;
+  onSelectSource: (path: string) => void;
 }) {
-  const sourceCounts = {
-    Books: archiveFiles.filter((path) => path.includes("Books.md")).length,
-    Papers: archiveFiles.filter((path) => path.includes("Papers.md")).length,
-    Articles: archiveFiles.filter((path) => path.includes("Articles.md"))
-      .length,
-    Quotes: archiveFiles.filter((path) => path.includes("Quotes.md")).length,
-    Claims: archiveFiles.filter((path) => path.includes("Claims.md")).length,
-    "Uploaded files": archiveFiles.filter((path) =>
-      path.startsWith("sources/files/"),
-    ).length,
-  };
   return (
-    <aside className="study-sidebar" aria-label="Study archive">
+    <aside className="study-sidebar" aria-label="Study sources">
       <div>
         <p className="eyebrow">Study</p>
-        <h2>Semantic Archive</h2>
+        <h2>Sources</h2>
+        <p>
+          {investigation?.sourceCoverage.chunks ?? 0} indexed passage
+          {(investigation?.sourceCoverage.chunks ?? 0) === 1 ? "" : "s"}
+        </p>
       </div>
-      <nav className="study-nav" aria-label="Archive navigation">
-        {["Sources", "Concepts", "Objects", "Claims", "Notes"].map((item) => (
-          <button key={item}>{item}</button>
-        ))}
-        <button>Semantic bookmarks</button>
-        <button>Recent investigations</button>
-      </nav>
-      <section className="study-sidebar-section">
-        <h3>Archive</h3>
-        {Object.entries(sourceCounts).map(([label, count]) => (
-          <button key={label} onClick={() => onOpenFile(sourcePathFor(label))}>
-            <span>{label}</span>
-            <strong>{count}</strong>
-          </button>
-        ))}
-      </section>
       <section className="study-sidebar-section study-source-picker">
         <div className="study-section-heading">
-          <h3>Study Sources</h3>
-          <button type="button" onClick={onClearSources}>
-            All
-          </button>
+          <h3>Latest Access</h3>
         </div>
-        {sourceFiles.map((path) => (
+        {sources.map((path) => (
           <button
             key={path}
             type="button"
             className={selectedSources.includes(path) ? "selected" : ""}
             aria-pressed={selectedSources.includes(path)}
-            onClick={() => onToggleSource(path)}
+            onClick={() => onSelectSource(path)}
           >
-            <span>{path.replace(/^sources\//, "")}</span>
+            <span>{sourceSortLabel(path)}</span>
           </button>
         ))}
       </section>
-      <section className="study-sidebar-section">
-        <h3>Objects</h3>
-        {objectFiles.slice(0, 7).map((path) => (
-          <button key={path} onClick={() => onOpenFile(path)}>
-            {path.replace(/^objects\//, "")}
+      <section className="study-sidebar-section study-search-results">
+        <div className="study-section-heading">
+          <h3>Search Results</h3>
+          <strong>{investigation?.directReferences.length ?? 0}</strong>
+        </div>
+        {(investigation?.directReferences ?? []).slice(0, 5).map((passage) => (
+          <button
+            key={passage.id}
+            type="button"
+            onClick={() => onSelectSource(passage.sourceFile)}
+          >
+            <span>
+              <strong>{sourceSortLabel(passage.sourceFile)}</strong>
+              {passage.quote}
+            </span>
           </button>
         ))}
+        {investigation && !investigation.directReferences.length ? (
+          <p className="muted">No matching passages yet.</p>
+        ) : null}
       </section>
-      <section className="study-sidebar-section">
-        <h3>Notes</h3>
-        <button onClick={() => onOpenFile("notes.md")}>
-          <span>Captured notes</span>
-          <strong>{notesCount}</strong>
-        </button>
-      </section>
-      {investigation?.conceptualEchoes.length ? (
-        <section className="study-sidebar-section">
-          <h3>Recent Inquiry</h3>
-          {investigation.conceptualEchoes.slice(0, 5).map((echo) => (
-            <button key={echo} onClick={() => onStudyConcept(echo)}>
-              {echo}
-            </button>
-          ))}
-        </section>
-      ) : null}
     </aside>
   );
 }
 
 function StudySurface({
+  bookId,
   query,
-  exhaustive,
   selectedSources,
   loading,
   investigation,
   onQueryChange,
-  onExhaustiveChange,
+  onSearchSubmit,
   onOpenFile,
   onStudyConcept,
+  onSourceSelectionNote,
 }: {
+  bookId?: string;
   query: string;
-  exhaustive: boolean;
   selectedSources: string[];
   loading: boolean;
   investigation: StudyInvestigation | null;
   onQueryChange: (value: string) => void;
-  onExhaustiveChange: (value: boolean) => void;
+  onSearchSubmit: () => void;
   onOpenFile: (path: string) => void;
   onStudyConcept: (concept: string) => void;
+  onSourceSelectionNote: (
+    source: NonNullable<StudyInvestigation["selectedSource"]>,
+    quote: string,
+  ) => void;
 }) {
+  const selectedSource =
+    selectedSources.length === 1 ? (investigation?.selectedSource ?? null) : null;
   return (
     <div className="study-surface">
       <section className="study-inquiry">
         <label>
-          <span>Search archive</span>
+          <Search size={19} aria-hidden="true" />
           <input
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
-            aria-label="Study search"
-            placeholder="Search concepts, sources, claims, and objects"
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                onSearchSubmit();
+              }
+            }}
+            aria-label="Search current source"
+            placeholder="Search this source"
           />
         </label>
-        <div className="study-audit-toggle" aria-label="Retrieval depth">
-          <label>
-            <input
-              type="checkbox"
-              checked={!exhaustive}
-              onChange={() => onExhaustiveChange(false)}
-            />
-            <span>Fast Semantic Search</span>
-          </label>
-          <label>
-            <input
-              type="checkbox"
-              checked={exhaustive}
-              onChange={() => onExhaustiveChange(true)}
-            />
-            <span>Exhaustive Scholarly Audit</span>
-          </label>
-        </div>
       </section>
 
-      <article className="study-scroll" aria-busy={loading}>
+      {selectedSources.length === 1 ? (
+        <SourceReader
+          bookId={bookId}
+          source={selectedSource}
+          loading={loading}
+          onSourceSelectionNote={onSourceSelectionNote}
+        />
+      ) : (
+        <article className="study-scroll" aria-busy={loading}>
         <header className="concept-header">
           <p className="eyebrow">Concept</p>
           <h1>{investigation?.title ?? titleCase(query)}</h1>
@@ -1216,8 +1288,85 @@ function StudySurface({
             <p key={entry}>{entry}</p>
           ))}
         </section>
-      </article>
+        </article>
+      )}
     </div>
+  );
+}
+
+function SourceReader({
+  bookId,
+  source,
+  loading,
+  onSourceSelectionNote,
+}: {
+  bookId?: string;
+  source: StudyInvestigation["selectedSource"];
+  loading: boolean;
+  onSourceSelectionNote: (
+    source: NonNullable<StudyInvestigation["selectedSource"]>,
+    quote: string,
+  ) => void;
+}) {
+  const [selectedText, setSelectedText] = useState("");
+  const updateSelectedText = () => {
+    setSelectedText(window.getSelection()?.toString().trim() ?? "");
+  };
+  const sourceUrl =
+    bookId && source
+      ? `/api/books/${bookId}/files/${encodeURIComponentPath(source.path)}?raw=1`
+      : "";
+  const canRenderPdf = Boolean(
+    sourceUrl && source?.mimeType === "application/pdf",
+  );
+  const canRenderText = Boolean(
+    sourceUrl &&
+      source?.kind === "upload" &&
+      source.mimeType.startsWith("text/"),
+  );
+  return (
+    <article className="study-scroll source-reader" aria-busy={loading}>
+      <header className="source-reader-header">
+        <p className="eyebrow">Source</p>
+        <h1>{source?.title ?? "Loading source"}</h1>
+        <div className="concept-meta">
+          <span>{source?.path ?? "selected source"}</span>
+          <span>{source?.kind ?? "source"}</span>
+          <span>{source?.mimeType ?? "index"}</span>
+          <span>{formatBytes(source?.sizeBytes ?? 0)}</span>
+        </div>
+        <button
+          type="button"
+          disabled={!source || !selectedText}
+          onClick={() => {
+            if (source) onSourceSelectionNote(source, selectedText);
+            setSelectedText("");
+            window.getSelection()?.removeAllRanges();
+          }}
+        >
+          Add Note
+        </button>
+      </header>
+      {canRenderPdf ? (
+        <iframe
+          className="source-pdf-viewer"
+          src={sourceUrl}
+          title={source?.title ?? "PDF source"}
+        />
+      ) : canRenderText ? (
+        <iframe
+          className="source-text-viewer"
+          src={sourceUrl}
+          title={source?.title ?? "Text source"}
+        />
+      ) : source ? (
+        <pre onMouseUp={updateSelectedText} onKeyUp={updateSelectedText}>
+          {source.text || "No searchable text has been extracted yet."}
+        </pre>
+      ) : (
+        <p className="muted">Reading the selected source.</p>
+      )}
+    </article>
   );
 }
 
@@ -1321,7 +1470,6 @@ function CommandPalette({
   const commands = [
     ["write", "Write mode"],
     ["preview", "Preview mode"],
-    ["read", "Read mode"],
     ["study", "Study mode"],
     ["save", "Save"],
     ["focus-notes", "Focus Notes"],
@@ -1429,17 +1577,31 @@ function cleanProjectPath(path: string, bookId?: string) {
   return path.replace(scoped, "");
 }
 
-function sourcePathFor(label: string) {
-  return (
-    {
-      Books: "sources/Books.md",
-      Papers: "sources/Papers.md",
-      Articles: "sources/Articles.md",
-      Quotes: "sources/Quotes.md",
-      Claims: "sources/Claims.md",
-      "Uploaded files": "sources/raw.md",
-    }[label] ?? "sources/raw.md"
-  );
+function sourceSortLabel(path: string) {
+  return path.startsWith("sources/files/")
+    ? (path.split("/").at(-1) ?? path)
+    : path.replace(/^sources\//, "");
+}
+
+function sortStudySources(
+  archiveFiles: string[],
+  sourceReadAt: Record<string, number>,
+) {
+  return archiveFiles
+    .filter(
+      (path) =>
+        path !== "sources/.study-index.json" &&
+        path !== "sources/files/README.md" &&
+        path.startsWith("sources/files/"),
+    )
+    .sort((a, b) => {
+      const recent = (sourceReadAt[b] ?? 0) - (sourceReadAt[a] ?? 0);
+      return recent || sourceSortLabel(a).localeCompare(sourceSortLabel(b));
+    });
+}
+
+function studyReadOrderKey(bookId: string) {
+  return `essai:${bookId}:study-source-read-order`;
 }
 
 function moveSectionBefore(
@@ -1451,6 +1613,27 @@ function moveSectionBefore(
   if (!section) return null;
   const inserted = insertSectionBefore(withoutDragged, targetId, section);
   return inserted ?? sections;
+}
+
+function renameSectionTitle(
+  sections: ManuscriptSection[],
+  sectionId: string,
+  title: string,
+): ManuscriptSection[] | null {
+  let renamed = false;
+  const next = sections.map((section) => {
+    if (section.id === sectionId) {
+      renamed = true;
+      return { ...section, title };
+    }
+    const children = renameSectionTitle(section.children ?? [], sectionId, title);
+    if (children) {
+      renamed = true;
+      return { ...section, children };
+    }
+    return section;
+  });
+  return renamed ? next : null;
 }
 
 function removeSection(
@@ -1508,6 +1691,13 @@ function titleCase(value: string) {
     .filter(Boolean)
     .map((part) => `${part[0]?.toUpperCase() ?? ""}${part.slice(1)}`)
     .join(" ");
+}
+
+function formatBytes(bytes: number) {
+  if (!bytes) return "0 B";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function insertSnippet(

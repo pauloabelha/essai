@@ -81,7 +81,7 @@ export async function refreshStudySourceIndex(
   const files = flattenFiles(nodes)
     .filter((node) => node.kind === "file")
     .map((file) => cleanPath(file.path))
-    .filter((path) => path.startsWith("sources/"));
+    .filter((path) => path.startsWith("sources/") || path === "notes.md");
   const sourceMarkdown = files.filter(
     (path) =>
       path.endsWith(".md") &&
@@ -174,6 +174,7 @@ async function readUploadedBytes(
 
 function chunkDocument(document: StudyIndexDocument): StudyIndexChunk[] {
   if (document.path === "sources/Claims.md") return chunkClaims(document);
+  if (document.path === "notes.md") return chunkNotes(document);
   if (document.kind === "markdown") return chunkSourceMarkdown(document);
   return splitSearchText(document).map((text, index) => ({
     id: `${document.id}:chunk:${index}`,
@@ -275,7 +276,37 @@ function chunkClaims(document: StudyIndexDocument): StudyIndexChunk[] {
     }));
 }
 
+function chunkNotes(document: StudyIndexDocument): StudyIndexChunk[] {
+  const notesOnly = document.searchText.match(/^##\s[\s\S]*$/m)?.[0] ?? "";
+  return notesOnly
+    .split(/\n---\n/g)
+    .map((block) => block.trim())
+    .filter((block) => /^##\s/.test(block))
+    .map((block, index) => {
+      const sourcePath = block.match(/^Source:\s*(.+)$/im)?.[1]?.trim() ?? "";
+      const timestamp =
+        block.match(/^##\s*(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2})/m)?.[1] ??
+        "note";
+      return {
+        id: `${document.id}:chunk:${index}`,
+        documentId: document.id,
+        chunkIndex: index,
+        path: document.path,
+        sourceType: "note",
+        page: timestamp,
+        text: normalizeNote(block),
+        metadata: {
+          ...document.metadata,
+          kind: document.kind,
+          title: document.title,
+          sourcePath,
+        },
+      };
+    });
+}
+
 function sourceTypeFromPath(path: string) {
+  if (path === "notes.md") return "note";
   if (path.includes("Books")) return "book";
   if (path.includes("Papers")) return "paper";
   if (path.includes("Articles")) return "article";
@@ -331,6 +362,15 @@ function normalizePassage(block: string) {
   return block
     .replace(/^##\s.+$/gm, "")
     .replace(/^Type:\s*.+$/gim, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function normalizeNote(block: string) {
+  return block
+    .replace(/^##\s.+$/gm, "")
+    .replace(/^Source title:\s*.+$/gim, "")
+    .replace(/^Source quote:\s*.+$/gim, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
