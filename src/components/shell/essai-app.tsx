@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "@/components/providers/theme-provider";
 import { MarkdownView } from "@/components/reading/markdown-view";
+import { PdfStudyReader } from "@/components/reading/pdf-study-reader";
 import type { AiSuggestion } from "@/lib/ai/types";
 import { expandSlashCommand, slashSnippets } from "@/lib/editor/slash";
 import type { BookMetadata, ManuscriptSection } from "@/lib/projects/templates";
@@ -97,6 +98,12 @@ interface StudyPassage {
   retrievalMethod: string;
 }
 
+interface StudyTarget {
+  sourceFile: string;
+  page: string;
+  quote: string;
+}
+
 export function EssaiApp({
   initialBooks,
   initialBookId,
@@ -127,6 +134,7 @@ export function EssaiApp({
   const [studySelectedSources, setStudySelectedSources] = useState<string[]>(
     [],
   );
+  const [studyTarget, setStudyTarget] = useState<StudyTarget | null>(null);
   const [studySourceReadAt, setStudySourceReadAt] = useState<
     Record<string, number>
   >({});
@@ -550,10 +558,24 @@ export function EssaiApp({
   }
 
   function selectStudySource(path: string) {
+    setStudyTarget(null);
     setStudySelectedSources([path]);
     setStudySourceReadAt((current) => ({
       ...current,
       [path]: Date.now(),
+    }));
+  }
+
+  function selectStudyPassage(passage: StudyPassage) {
+    setStudyTarget({
+      sourceFile: passage.sourceFile,
+      page: passage.page,
+      quote: passage.quote,
+    });
+    setStudySelectedSources([passage.sourceFile]);
+    setStudySourceReadAt((current) => ({
+      ...current,
+      [passage.sourceFile]: Date.now(),
     }));
   }
 
@@ -615,6 +637,7 @@ export function EssaiApp({
           selectedSources={studySelectedSources}
           investigation={studyInvestigation}
           onSelectSource={selectStudySource}
+          onSelectPassage={selectStudyPassage}
         />
       ) : !focusMode ? (
         <aside className="left-pane" aria-label="Manuscript sections">
@@ -716,6 +739,7 @@ export function EssaiApp({
             bookId={bookId}
             query={studyQuery}
             selectedSources={studySelectedSources}
+            target={studyTarget}
             loading={studyLoading}
             investigation={studyInvestigation}
             onQueryChange={setStudyQuery}
@@ -724,6 +748,7 @@ export function EssaiApp({
               setViewMode("preview");
               loadFile(path);
             }}
+            onOpenPassage={selectStudyPassage}
             onStudyConcept={setStudyQuery}
             onSourceSelectionNote={commitSourceSelectionNote}
           />
@@ -1085,11 +1110,13 @@ function StudySidebar({
   selectedSources,
   investigation,
   onSelectSource,
+  onSelectPassage,
 }: {
   sources: string[];
   selectedSources: string[];
   investigation: StudyInvestigation | null;
   onSelectSource: (path: string) => void;
+  onSelectPassage: (passage: StudyPassage) => void;
 }) {
   return (
     <aside className="study-sidebar" aria-label="Study sources">
@@ -1132,10 +1159,13 @@ function StudySidebar({
           <button
             key={passage.id}
             type="button"
-            onClick={() => onSelectSource(passage.sourceFile)}
+            onClick={() => onSelectPassage(passage)}
           >
             <span>
               <strong>{sourceSortLabel(passage.sourceFile)}</strong>
+              <em>
+                {passage.page !== "index" ? `p. ${passage.page}` : passage.page}
+              </em>
               {passage.quote}
             </span>
           </button>
@@ -1152,22 +1182,26 @@ function StudySurface({
   bookId,
   query,
   selectedSources,
+  target,
   loading,
   investigation,
   onQueryChange,
   onSearchSubmit,
   onOpenFile,
+  onOpenPassage,
   onStudyConcept,
   onSourceSelectionNote,
 }: {
   bookId?: string;
   query: string;
   selectedSources: string[];
+  target: StudyTarget | null;
   loading: boolean;
   investigation: StudyInvestigation | null;
   onQueryChange: (value: string) => void;
   onSearchSubmit: () => void;
   onOpenFile: (path: string) => void;
+  onOpenPassage: (passage: StudyPassage) => void;
   onStudyConcept: (concept: string) => void;
   onSourceSelectionNote: (
     source: NonNullable<StudyInvestigation["selectedSource"]>,
@@ -1202,6 +1236,7 @@ function StudySurface({
         <SourceReader
           bookId={bookId}
           source={selectedSource}
+          target={target}
           loading={loading}
           onSourceSelectionNote={onSourceSelectionNote}
         />
@@ -1253,7 +1288,7 @@ function StudySurface({
             title="Direct References"
             passages={investigation?.directReferences ?? []}
             empty="No high-confidence passages yet."
-            onOpenFile={onOpenFile}
+            onOpenPassage={onOpenPassage}
           />
 
           <section className="study-section">
@@ -1271,7 +1306,7 @@ function StudySurface({
             title="Claims"
             passages={investigation?.claims ?? []}
             empty="No related claims have been indexed in sources/Claims.md."
-            onOpenFile={onOpenFile}
+            onOpenPassage={onOpenPassage}
           />
 
           <section className="study-section">
@@ -1314,11 +1349,13 @@ function StudySurface({
 function SourceReader({
   bookId,
   source,
+  target,
   loading,
   onSourceSelectionNote,
 }: {
   bookId?: string;
   source: StudyInvestigation["selectedSource"];
+  target: StudyTarget | null;
   loading: boolean;
   onSourceSelectionNote: (
     source: NonNullable<StudyInvestigation["selectedSource"]>,
@@ -1326,21 +1363,39 @@ function SourceReader({
   ) => void;
 }) {
   const [selectedText, setSelectedText] = useState("");
+  const textRef = useRef<HTMLPreElement | null>(null);
   const updateSelectedText = () => {
     setSelectedText(window.getSelection()?.toString().trim() ?? "");
   };
-  const sourceUrl =
+  const sourceUrlBase =
     bookId && source
       ? `/api/books/${bookId}/files/${encodeURIComponentPath(source.path)}?raw=1`
       : "";
+  const targetPdfPage =
+    target && target.sourceFile === source?.path
+      ? Number(pdfPageTarget(target.page))
+      : null;
+  const targetPdfQuote =
+    target && target.sourceFile === source?.path ? target.quote : "";
   const canRenderPdf = Boolean(
-    sourceUrl && source?.mimeType === "application/pdf",
+    sourceUrlBase && source?.mimeType === "application/pdf",
   );
   const canRenderText = Boolean(
-    sourceUrl &&
+    sourceUrlBase &&
     source?.kind === "upload" &&
     source.mimeType.startsWith("text/"),
   );
+  const textTarget = useMemo(
+    () => findStudyTextTarget(source?.text ?? "", target),
+    [source?.text, target],
+  );
+
+  useEffect(() => {
+    if (!textTarget || !textRef.current) return;
+    const marker = textRef.current.querySelector("[data-study-target='true']");
+    marker?.scrollIntoView({ block: "center" });
+  }, [textTarget]);
+
   return (
     <article className="study-scroll source-reader" aria-busy={loading}>
       <header className="source-reader-header">
@@ -1365,20 +1420,34 @@ function SourceReader({
         </button>
       </header>
       {canRenderPdf ? (
-        <iframe
-          className="source-pdf-viewer"
-          src={sourceUrl}
+        <PdfStudyReader
+          url={sourceUrlBase}
           title={source?.title ?? "PDF source"}
+          targetPage={targetPdfPage}
+          targetQuote={targetPdfQuote}
         />
       ) : canRenderText ? (
-        <iframe
-          className="source-text-viewer"
-          src={sourceUrl}
-          title={source?.title ?? "Text source"}
-        />
+        <pre
+          ref={textRef}
+          onMouseUp={updateSelectedText}
+          onKeyUp={updateSelectedText}
+        >
+          <HighlightedSourceText
+            text={source?.text ?? ""}
+            target={textTarget}
+          />
+        </pre>
       ) : source ? (
-        <pre onMouseUp={updateSelectedText} onKeyUp={updateSelectedText}>
-          {source.text || "No searchable text has been extracted yet."}
+        <pre
+          ref={textRef}
+          onMouseUp={updateSelectedText}
+          onKeyUp={updateSelectedText}
+        >
+          {source.text ? (
+            <HighlightedSourceText text={source.text} target={textTarget} />
+          ) : (
+            "No searchable text has been extracted yet."
+          )}
         </pre>
       ) : (
         <p className="muted">Reading the selected source.</p>
@@ -1387,16 +1456,91 @@ function SourceReader({
   );
 }
 
+function HighlightedSourceText({
+  text,
+  target,
+}: {
+  text: string;
+  target: { start: number; end: number } | null;
+}) {
+  if (!target) return text;
+  return (
+    <>
+      {text.slice(0, target.start)}
+      <mark data-study-target="true">
+        {text.slice(target.start, target.end)}
+      </mark>
+      {text.slice(target.end)}
+    </>
+  );
+}
+
+function findStudyTextTarget(text: string, target: StudyTarget | null) {
+  if (!text || !target) return null;
+  const page = pdfPageTarget(target.page);
+  if (page) {
+    const pageIndex = text.indexOf(`[Page ${page}]`);
+    if (pageIndex >= 0) {
+      const nextPageIndex = text.indexOf("[Page ", pageIndex + 1);
+      return {
+        start: pageIndex,
+        end: nextPageIndex > pageIndex ? nextPageIndex : text.length,
+      };
+    }
+  }
+
+  const quoteNeedle = target.quote
+    .replace(/\.\.\./g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 140);
+  if (!quoteNeedle) return null;
+  const normalized = text.replace(/\s+/g, " ");
+  const normalizedIndex = normalized
+    .toLowerCase()
+    .indexOf(quoteNeedle.toLowerCase());
+  if (normalizedIndex < 0) return null;
+
+  const start = indexInOriginalText(text, normalizedIndex);
+  const end = indexInOriginalText(
+    text,
+    normalizedIndex + Math.min(quoteNeedle.length, 220),
+  );
+  return { start, end: Math.max(start + 1, end) };
+}
+
+function indexInOriginalText(text: string, normalizedIndex: number) {
+  let normalizedSeen = 0;
+  let inWhitespace = false;
+  for (let index = 0; index < text.length; index += 1) {
+    if (normalizedSeen >= normalizedIndex) return index;
+    if (/\s/.test(text[index])) {
+      if (!inWhitespace) {
+        normalizedSeen += 1;
+        inWhitespace = true;
+      }
+    } else {
+      normalizedSeen += 1;
+      inWhitespace = false;
+    }
+  }
+  return text.length;
+}
+
+function pdfPageTarget(page: string) {
+  return /^\d+$/.test(page) ? page : "";
+}
+
 function StudyPassageSection({
   title,
   passages,
   empty,
-  onOpenFile,
+  onOpenPassage,
 }: {
   title: string;
   passages: StudyPassage[];
   empty: string;
-  onOpenFile: (path: string) => void;
+  onOpenPassage: (passage: StudyPassage) => void;
 }) {
   return (
     <section className="study-section">
@@ -1404,10 +1548,7 @@ function StudyPassageSection({
       <div className="passage-ledger">
         {passages.length ? (
           passages.map((passage) => (
-            <button
-              key={passage.id}
-              onClick={() => onOpenFile(passage.sourceFile)}
-            >
+            <button key={passage.id} onClick={() => onOpenPassage(passage)}>
               <blockquote>{passage.quote}</blockquote>
               <dl>
                 <div>

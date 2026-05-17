@@ -43,6 +43,8 @@ The Study room is built around:
 
 The first implementation uses local source indexes and layered retrieval. Literal matches are ranked first, lexical matches can catch nearby forms and small typos, and semantic-neighbor matches can surface adjacent archival language such as `automata`, `mechanical`, or `instructions` for a query like `programmable machines`. Each passage keeps its source file, page or location, confidence, and retrieval method visible so search remains inspectable rather than conversational.
 
+PDF sources render inside Study mode with a local PDF.js reader rather than the browser’s embedded PDF plugin. Selecting a search result sends the reader to the cited page without reloading the document and highlights the matching text run on the page when the PDF exposes extractable text. The reader keeps page and zoom controls close to the source, so result navigation feels like moving through an archive rather than opening separate files.
+
 Study mode never writes to `main.md`. Its summaries and pathways are only interpretive views over auxiliary project files. The right capture panel stays available in Study mode, so notes and new sources can be added while the source shelf remains visible.
 
 ## Notes And Sources Capture
@@ -114,6 +116,7 @@ This generated Study index contains normalized `documents` and `chunks` used by 
 - Route Handlers under `src/app/api` for book and file operations.
 - Study archive route under `src/app/api/books/[bookId]/study`.
 - CodeMirror 6 for Markdown editing.
+- PDF.js for in-app Study PDF rendering, page navigation, and match highlighting.
 - Markdown files as the primary data model.
 - A storage abstraction in `src/lib/storage`.
 - Binary storage methods for uploaded source files.
