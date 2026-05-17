@@ -1,12 +1,15 @@
 import { flattenFiles } from "@/lib/markdown/wiki";
 import { readBookFile, listBookFiles } from "@/lib/projects/files";
 import { bookRoot } from "@/lib/projects/service";
+import { createLogger } from "@/lib/server/log";
 import {
   readOrRefreshStudySourceIndex,
   type StudyIndexChunk,
   type StudySourceIndex,
 } from "@/lib/study/source-index";
 import type { StorageProvider } from "@/lib/storage/types";
+
+const log = createLogger("study:archive");
 
 export interface StudyPassage {
   id: string;
@@ -45,6 +48,10 @@ export interface StudyInvestigation {
     sources: number;
     chunks: number;
     files: number;
+    matches: number;
+    exactMatches: number;
+    lexicalMatches: number;
+    semanticMatches: number;
     scope: string;
   };
   directReferences: StudyPassage[];
@@ -110,6 +117,15 @@ const DEFAULT_ECHOES = [
   "stored instructions",
 ];
 
+type RetrievalMethod = "Exact Match" | "Lexical Match" | "Semantic Neighbor";
+
+interface RankedChunk {
+  chunk: StudyIndexChunk;
+  index: number;
+  score: number;
+  retrievalMethod: RetrievalMethod;
+}
+
 export async function buildStudyInvestigation(
   storage: StorageProvider,
   bookId: string,
@@ -122,6 +138,12 @@ export async function buildStudyInvestigation(
   const query = (input.query ?? "").trim() || "sources";
   const exhaustive = input.exhaustive ?? true;
   const selectedSources = new Set(input.sourcePaths ?? []);
+  log.info("investigation requested", {
+    bookId,
+    query,
+    exhaustive,
+    selectedSources: [...selectedSources],
+  });
   const files = flattenFiles(await listBookFiles(storage, bookId)).filter(
     (node) => node.kind === "file",
   );
@@ -146,6 +168,15 @@ export async function buildStudyInvestigation(
     selectedSources.size === 1
       ? selectedSourceFromIndex(index, [...selectedSources][0])
       : null;
+  log.info("investigation scope resolved", {
+    bookId,
+    sourceMarkdown: sourceMarkdown.length,
+    uploadedFiles: uploadedFiles.length,
+    selectedUploadedFiles: selectedUploadedFiles.length,
+    selectedSource: selectedSource?.path ?? null,
+    indexDocuments: index.documents.length,
+    indexChunks: index.chunks.length,
+  });
   const chunks = index.chunks.filter(
     (chunk) =>
       sourceMarkdown.includes(chunk.path) ||
@@ -166,24 +197,47 @@ export async function buildStudyInvestigation(
     })),
   );
 
-  const ranked = rankChunks(chunks, query, exhaustive);
+  const ranked = rankChunks(chunks, query);
+  const positiveRanked = ranked.filter((chunk) => chunk.score > 0);
+  log.info("chunks ranked", {
+    query,
+    candidates: chunks.length,
+    positive: positiveRanked.length,
+    top: ranked.slice(0, 5).map((item) => ({
+      path: item.chunk.path,
+      sourceType: item.chunk.sourceType,
+      score: Number(item.score.toFixed(2)),
+      method: item.retrievalMethod,
+      text: item.chunk.text.slice(0, 90),
+    })),
+  });
   const directReferences = ranked
-    .filter((chunk) => chunk.score > 0)
+    .filter(
+      (chunk) => chunk.score > 0 && chunk.chunk.path !== "sources/Claims.md",
+    )
     .slice(0, exhaustive ? 8 : 5)
-    .map((chunk) => passageFromChunk(chunk.chunk, query, chunk.score));
-  const claimReferences = rankChunks(claims, query, exhaustive)
-    .filter((chunk) => chunk.score > 0 || exhaustive)
+    .map((chunk) =>
+      passageFromChunk(chunk.chunk, query, chunk.score, chunk.retrievalMethod),
+    );
+  const claimReferences = rankChunks(claims, query)
+    .filter((chunk) => chunk.score > 0)
     .slice(0, 5)
-    .map((chunk) => passageFromChunk(chunk.chunk, query, chunk.score || 1));
+    .map((chunk) =>
+      passageFromChunk(chunk.chunk, query, chunk.score, chunk.retrievalMethod),
+    );
   const relatedObjects = rankObjects(objects, query).slice(0, 6);
-  const relatedConcepts = deriveRelatedConcepts(
-    query,
-    ranked.map((item) => item.chunk.text),
-  );
-  const conceptualEchoes = deriveEchoes(
-    query,
-    ranked.map((item) => item.chunk.text),
-  );
+  const evidenceTexts = positiveRanked.map((item) => item.chunk.text);
+  const relatedConcepts = deriveRelatedConcepts(query, evidenceTexts);
+  const conceptualEchoes = deriveEchoes(query, evidenceTexts);
+  const exactMatches = positiveRanked.filter(
+    (item) => item.retrievalMethod === "Exact Match",
+  ).length;
+  const lexicalMatches = positiveRanked.filter(
+    (item) => item.retrievalMethod === "Lexical Match",
+  ).length;
+  const semanticMatches = positiveRanked.filter(
+    (item) => item.retrievalMethod === "Semantic Neighbor",
+  ).length;
 
   return {
     query,
@@ -196,6 +250,10 @@ export async function buildStudyInvestigation(
       files: selectedSources.size
         ? selectedUploadedFiles.length
         : uploadedFiles.length,
+      matches: positiveRanked.length,
+      exactMatches,
+      lexicalMatches,
+      semanticMatches,
       scope: exhaustive
         ? selectedSources.size
           ? `Exhaustive scholarly audit across ${selectedSources.size} selected source index${selectedSources.size === 1 ? "" : "es"}`
@@ -214,6 +272,7 @@ export async function buildStudyInvestigation(
       `Read ${sourceMarkdown.length} Markdown index${sourceMarkdown.length === 1 ? "" : "es"} from /sources.`,
       `Identified ${uploadedFiles.length} uploaded source files.`,
       `Examined ${chunks.length} indexed source chunks${exhaustive ? " sequentially for recall" : " with fast scoring"}.`,
+      `Found ${positiveRanked.length} relevant passage${positiveRanked.length === 1 ? "" : "s"}: ${exactMatches} exact, ${lexicalMatches} lexical, ${semanticMatches} semantic-neighbor.`,
       `Study index refreshed at ${index.updatedAt}.`,
       `Connected ${relatedObjects.length} related object records from /objects.`,
     ],
@@ -238,21 +297,22 @@ function selectedSourceFromIndex(
   };
 }
 
-function rankChunks(
-  chunks: StudyIndexChunk[],
-  query: string,
-  exhaustive: boolean,
-) {
-  const terms = semanticTerms(query);
+function rankChunks(chunks: StudyIndexChunk[], query: string): RankedChunk[] {
+  const terms = queryTerms(query);
   return chunks
-    .map((chunk, index) => ({
-      chunk,
-      score:
-        scoreText(`${chunk.path}\n${chunk.text}`, terms) +
-        (exhaustive ? 0.05 / (index + 1) : 0),
-    }))
+    .map((chunk, index) => {
+      const result = scoreText(chunk.text, terms);
+      return {
+        chunk,
+        index,
+        ...result,
+      };
+    })
     .sort(
-      (a, b) => b.score - a.score || a.chunk.path.localeCompare(b.chunk.path),
+      (a, b) =>
+        b.score - a.score ||
+        a.index - b.index ||
+        a.chunk.path.localeCompare(b.chunk.path),
     );
 }
 
@@ -260,11 +320,11 @@ function rankObjects(
   objects: Array<{ path: string; content: string }>,
   query: string,
 ): StudyObject[] {
-  const terms = semanticTerms(query);
+  const terms = queryTerms(query);
   return objects
     .map((object) => ({
       object,
-      score: scoreText(`${object.path}\n${object.content}`, terms),
+      score: scoreText(`${object.path}\n${object.content}`, terms).score,
     }))
     .filter((item) => item.score > 0)
     .sort(
@@ -283,10 +343,11 @@ function passageFromChunk(
   chunk: StudyIndexChunk,
   query: string,
   score: number,
+  retrievalMethod: RetrievalMethod,
 ): StudyPassage {
   return {
     id: chunk.id,
-    quote: excerptFor(chunk.text, semanticTerms(query)),
+    quote: excerptFor(chunk.text, excerptTerms(query)),
     sourceFile:
       chunk.sourceType === "note" && chunk.metadata.sourcePath
         ? String(chunk.metadata.sourcePath)
@@ -294,7 +355,7 @@ function passageFromChunk(
     sourceType: chunk.sourceType,
     page: chunk.page,
     confidence: score > 4 ? "High" : score > 1.5 ? "Medium" : "Low",
-    retrievalMethod: "Hybrid lexical and semantic-neighbor retrieval",
+    retrievalMethod,
   };
 }
 
@@ -348,28 +409,70 @@ function buildGraph(
   return { nodes, links };
 }
 
-function semanticTerms(query: string) {
-  const base = query
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean);
-  return [
-    ...new Set(
-      base.flatMap((term) => [term, ...(SEMANTIC_NEIGHBORS[term] ?? [])]),
-    ),
+function queryTerms(query: string) {
+  const literal = normalizeText(query);
+  const base = tokenize(query);
+  const semantic = [
+    ...new Set(base.flatMap((term) => SEMANTIC_NEIGHBORS[term] ?? [])),
   ];
+  return { literal, base, semantic };
 }
 
-function scoreText(text: string, terms: string[]) {
-  const haystack = text.toLowerCase();
-  return terms.reduce((score, term, index) => {
-    const hits = haystack.split(term).length - 1;
-    return score + hits * (index < 3 ? 2 : 0.85);
-  }, 0);
+function scoreText(text: string, terms: ReturnType<typeof queryTerms>) {
+  const haystack = normalizeText(text);
+  const words = tokenize(text);
+  const wordStems = words.map(stemTerm);
+  let exact = 0;
+  let lexical = 0;
+  let semantic = 0;
+
+  if (
+    terms.literal &&
+    terms.literal.length > 2 &&
+    haystack.includes(terms.literal)
+  ) {
+    exact += terms.base.length > 1 ? 8 : 4;
+  }
+
+  for (const [index, term] of terms.base.entries()) {
+    const occurrences = countOccurrences(haystack, term);
+    exact += occurrences * (index < 3 ? 2 : 1);
+
+    const stem = stemTerm(term);
+    if (stem.length > 3) {
+      lexical += wordStems.filter((wordStem) => wordStem === stem).length * 0.8;
+    }
+
+    if (term.length > 4) {
+      lexical +=
+        words.filter((word) => word !== term && editDistance(word, term) <= 1)
+          .length * 0.7;
+    }
+  }
+
+  for (const term of terms.semantic) {
+    semantic += countOccurrences(haystack, term) * 0.85;
+  }
+
+  const score = exact + lexical + semantic;
+  return {
+    score,
+    retrievalMethod: dominantMethod(exact, lexical, semantic),
+  };
+}
+
+function dominantMethod(
+  exact: number,
+  lexical: number,
+  semantic: number,
+): RetrievalMethod {
+  if (exact >= lexical && exact >= semantic && exact > 0) return "Exact Match";
+  if (lexical >= semantic && lexical > 0) return "Lexical Match";
+  return semantic > 0 ? "Semantic Neighbor" : "Lexical Match";
 }
 
 function deriveRelatedConcepts(query: string, passages: string[]) {
-  const terms = semanticTerms(query);
+  const terms = excerptTerms(query);
   const candidates = [...DEFAULT_ECHOES, ...terms]
     .filter((term) => !query.toLowerCase().includes(term.toLowerCase()))
     .filter(
@@ -414,6 +517,55 @@ function excerptFor(text: string, terms: string[]) {
   const start = Math.max(0, index - 90);
   const end = Math.min(oneLine.length, index + 220);
   return `${start ? "..." : ""}${oneLine.slice(start, end)}${end < oneLine.length ? "..." : ""}`;
+}
+
+function excerptTerms(query: string) {
+  const terms = queryTerms(query);
+  return [...new Set([...terms.base, ...terms.semantic])];
+}
+
+function normalizeText(text: string) {
+  return tokenize(text).join(" ");
+}
+
+function tokenize(text: string) {
+  return text
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+}
+
+function stemTerm(term: string) {
+  if (term.length > 5 && term.endsWith("ies")) return `${term.slice(0, -3)}y`;
+  if (term.length > 5 && term.endsWith("ing")) return term.slice(0, -3);
+  if (term.length > 4 && term.endsWith("ed")) return term.slice(0, -2);
+  if (term.length > 4 && term.endsWith("es")) return term.slice(0, -2);
+  if (term.length > 3 && term.endsWith("s")) return term.slice(0, -1);
+  return term;
+}
+
+function countOccurrences(text: string, term: string) {
+  if (!term) return 0;
+  return text.split(term).length - 1;
+}
+
+function editDistance(a: string, b: string) {
+  if (Math.abs(a.length - b.length) > 1) return 2;
+  const previous = Array.from({ length: b.length + 1 }, (_, index) => index);
+  for (let i = 1; i <= a.length; i += 1) {
+    let last = i - 1;
+    previous[0] = i;
+    for (let j = 1; j <= b.length; j += 1) {
+      const next = previous[j];
+      previous[j] = Math.min(
+        previous[j] + 1,
+        previous[j - 1] + 1,
+        last + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+      last = next;
+    }
+  }
+  return previous[b.length];
 }
 
 function firstParagraph(content: string) {

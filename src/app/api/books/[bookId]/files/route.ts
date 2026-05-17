@@ -4,8 +4,11 @@ import {
   listBookFiles,
   readAllMarkdownFiles,
 } from "@/lib/projects/files";
+import { createLogger } from "@/lib/server/log";
 import { getServerStorage } from "@/lib/storage/server";
 import { searchDocuments } from "@/lib/search";
+
+const log = createLogger("api:files");
 
 export async function GET(
   request: Request,
@@ -16,11 +19,19 @@ export async function GET(
   const query = url.searchParams.get("q");
   const storage = getServerStorage();
   if (query) {
-    return NextResponse.json(
-      searchDocuments(await readAllMarkdownFiles(storage, bookId), query),
-    );
+    const documents = await readAllMarkdownFiles(storage, bookId);
+    const results = searchDocuments(documents, query);
+    log.info("GET /files search", {
+      bookId,
+      query,
+      documents: documents.length,
+      results: results.length,
+    });
+    return NextResponse.json(results);
   }
-  return NextResponse.json(await listBookFiles(storage, bookId));
+  const files = await listBookFiles(storage, bookId);
+  log.info("GET /files list", { bookId, roots: files.length });
+  return NextResponse.json(files);
 }
 
 export async function POST(
@@ -29,8 +40,15 @@ export async function POST(
 ) {
   const { bookId } = await context.params;
   const body = (await request.json()) as { path?: string; content?: string };
-  if (!body.path)
+  if (!body.path) {
+    log.warn("POST /files rejected", { bookId, reason: "missing path" });
     return NextResponse.json({ error: "Path is required" }, { status: 400 });
+  }
+  log.info("POST /files", {
+    bookId,
+    path: body.path,
+    characters: body.content?.length ?? 0,
+  });
   await createBookFile(
     getServerStorage(),
     bookId,

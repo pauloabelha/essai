@@ -1,8 +1,10 @@
 import { readBookFile, writeBookFile } from "./files";
+import { createLogger } from "@/lib/server/log";
 import { refreshStudySourceIndex } from "@/lib/study/source-index";
 import type { StorageProvider } from "@/lib/storage/types";
 
 export const CURRENT_NOTES_PATH = "notes.md";
+const log = createLogger("projects:notes");
 
 export interface NoteSourceReference {
   path: string;
@@ -43,6 +45,12 @@ export async function appendNote(
 ) {
   const trimmed = note.trim();
   if (!trimmed) throw new Error("Note is required");
+  log.info("append note", {
+    bookId,
+    characters: trimmed.length,
+    sourcePath: source?.path ?? null,
+    hasQuote: Boolean(source?.quote),
+  });
 
   let current =
     "# Notes\n\nFast captures live here until they are processed.\n\n";
@@ -59,6 +67,11 @@ export async function appendNote(
   )}`;
   await writeBookFile(storage, bookId, CURRENT_NOTES_PATH, next);
   await refreshStudySourceIndex(storage, bookId);
+  log.info("note appended", {
+    bookId,
+    path: CURRENT_NOTES_PATH,
+    count: countNoteBlocks(next),
+  });
   return {
     path: CURRENT_NOTES_PATH,
     count: countNoteBlocks(next),

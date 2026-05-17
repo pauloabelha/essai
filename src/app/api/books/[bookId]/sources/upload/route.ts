@@ -1,9 +1,11 @@
 import { NextResponse } from "next/server";
 import { appendSourceFile, parseSourceKind } from "@/lib/projects/sources";
+import { createLogger } from "@/lib/server/log";
 import { getServerStorage } from "@/lib/storage/server";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+const log = createLogger("api:upload");
 
 export async function POST(
   request: Request,
@@ -16,12 +18,23 @@ export async function POST(
     const kind = parseSourceKind(form.get("kind"));
 
     if (!isUploadFile(file)) {
+      log.warn("POST /sources/upload rejected", {
+        bookId,
+        reason: "missing file",
+      });
       return NextResponse.json(
         { error: "Source file is required" },
         { status: 400 },
       );
     }
 
+    log.info("POST /sources/upload", {
+      bookId,
+      kind,
+      name: file.name,
+      size: file.size,
+      type: file.type,
+    });
     const result = await appendSourceFile(
       getServerStorage(),
       bookId,
@@ -32,10 +45,12 @@ export async function POST(
       kind,
     );
 
+    log.info("POST /sources/upload response", result);
     return NextResponse.json(result);
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Source file upload failed";
+    log.error("POST /sources/upload failed", { error: message });
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

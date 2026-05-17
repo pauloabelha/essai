@@ -15,7 +15,7 @@ import {
   Sun,
   Upload,
 } from "lucide-react";
-import { useTheme } from "next-themes";
+import { useTheme } from "@/components/providers/theme-provider";
 import { MarkdownView } from "@/components/reading/markdown-view";
 import type { AiSuggestion } from "@/lib/ai/types";
 import { expandSlashCommand, slashSnippets } from "@/lib/editor/slash";
@@ -52,6 +52,10 @@ interface StudyInvestigation {
     sources: number;
     chunks: number;
     files: number;
+    matches: number;
+    exactMatches: number;
+    lexicalMatches: number;
+    semanticMatches: number;
     scope: string;
   };
   directReferences: StudyPassage[];
@@ -347,12 +351,7 @@ export function EssaiApp({
       controller.abort();
       window.clearTimeout(handle);
     };
-  }, [
-    bookId,
-    files,
-    loadStudyInvestigation,
-    viewMode,
-  ]);
+  }, [bookId, files, loadStudyInvestigation, viewMode]);
 
   async function createNewBook(titleFromForm?: string) {
     const title = titleFromForm || window.prompt("Book title");
@@ -1101,6 +1100,12 @@ function StudySidebar({
           {investigation?.sourceCoverage.chunks ?? 0} indexed passage
           {(investigation?.sourceCoverage.chunks ?? 0) === 1 ? "" : "s"}
         </p>
+        {investigation ? (
+          <p>
+            {investigation.sourceCoverage.matches} relevant match
+            {investigation.sourceCoverage.matches === 1 ? "" : "es"}
+          </p>
+        ) : null}
       </div>
       <section className="study-sidebar-section study-source-picker">
         <div className="study-section-heading">
@@ -1170,7 +1175,9 @@ function StudySurface({
   ) => void;
 }) {
   const selectedSource =
-    selectedSources.length === 1 ? (investigation?.selectedSource ?? null) : null;
+    selectedSources.length === 1
+      ? (investigation?.selectedSource ?? null)
+      : null;
   return (
     <div className="study-surface">
       <section className="study-inquiry">
@@ -1200,94 +1207,104 @@ function StudySurface({
         />
       ) : (
         <article className="study-scroll" aria-busy={loading}>
-        <header className="concept-header">
-          <p className="eyebrow">Concept</p>
-          <h1>{investigation?.title ?? titleCase(query)}</h1>
-          <p>{investigation?.summary ?? "Reading the source archive."}</p>
-          <div className="concept-meta">
-            <span>
-              {investigation?.sourceCoverage.sources ?? 0} source indexes
-            </span>
-            <span>{investigation?.sourceCoverage.chunks ?? 0} chunks</span>
-            <span>{investigation?.sourceCoverage.files ?? 0} files</span>
-            <span>
-              {selectedSources.length
-                ? `${selectedSources.length} selected`
-                : "all sources"}
-            </span>
-            <span>
-              {investigation?.sourceCoverage.scope ?? "Preparing audit"}
-            </span>
-          </div>
-          <div className="concept-tags">
-            {(investigation?.relatedConcepts ?? []).map((concept) => (
-              <button key={concept} onClick={() => onStudyConcept(concept)}>
-                {concept}
-              </button>
-            ))}
-          </div>
-        </header>
-
-        {loading ? (
-          <p className="study-loading">Accumulating source evidence.</p>
-        ) : null}
-
-        <StudyPassageSection
-          title="Direct References"
-          passages={investigation?.directReferences ?? []}
-          empty="No high-confidence passages yet."
-          onOpenFile={onOpenFile}
-        />
-
-        <section className="study-section">
-          <h2>Conceptual Echoes</h2>
-          <div className="echo-list">
-            {(investigation?.conceptualEchoes ?? []).map((echo) => (
-              <button key={echo} onClick={() => onStudyConcept(echo)}>
-                {echo}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <StudyPassageSection
-          title="Claims"
-          passages={investigation?.claims ?? []}
-          empty="No related claims have been indexed in sources/Claims.md."
-          onOpenFile={onOpenFile}
-        />
-
-        <section className="study-section">
-          <h2>Related Objects</h2>
-          <div className="object-ledger">
-            {(investigation?.relatedObjects ?? []).length ? (
-              investigation?.relatedObjects.map((object) => (
-                <button
-                  key={object.path}
-                  onClick={() => onOpenFile(object.path)}
-                >
-                  <strong>{object.title}</strong>
-                  <span>{object.path}</span>
-                  <p>{object.excerpt}</p>
+          <header className="concept-header">
+            <p className="eyebrow">Concept</p>
+            <h1>{investigation?.title ?? titleCase(query)}</h1>
+            <p>{investigation?.summary ?? "Reading the source archive."}</p>
+            <div className="concept-meta">
+              <span>
+                {investigation?.sourceCoverage.sources ?? 0} source indexes
+              </span>
+              <span>{investigation?.sourceCoverage.chunks ?? 0} chunks</span>
+              <span>{investigation?.sourceCoverage.files ?? 0} files</span>
+              <span>{investigation?.sourceCoverage.matches ?? 0} matches</span>
+              <span>
+                {investigation?.sourceCoverage.exactMatches ?? 0} exact
+              </span>
+              <span>
+                {investigation?.sourceCoverage.lexicalMatches ?? 0} lexical
+              </span>
+              <span>
+                {investigation?.sourceCoverage.semanticMatches ?? 0} semantic
+              </span>
+              <span>
+                {selectedSources.length
+                  ? `${selectedSources.length} selected`
+                  : "all sources"}
+              </span>
+              <span>
+                {investigation?.sourceCoverage.scope ?? "Preparing audit"}
+              </span>
+            </div>
+            <div className="concept-tags">
+              {(investigation?.relatedConcepts ?? []).map((concept) => (
+                <button key={concept} onClick={() => onStudyConcept(concept)}>
+                  {concept}
                 </button>
-              ))
-            ) : (
-              <p className="muted">No object records connected yet.</p>
-            )}
-          </div>
-        </section>
+              ))}
+            </div>
+          </header>
 
-        <section className="study-section">
-          <h2>Source Graph</h2>
-          <StudyGraph investigation={investigation} />
-        </section>
+          {loading ? (
+            <p className="study-loading">Accumulating source evidence.</p>
+          ) : null}
 
-        <section className="study-section audit-log">
-          <h2>Coverage Log</h2>
-          {(investigation?.auditLog ?? []).map((entry) => (
-            <p key={entry}>{entry}</p>
-          ))}
-        </section>
+          <StudyPassageSection
+            title="Direct References"
+            passages={investigation?.directReferences ?? []}
+            empty="No high-confidence passages yet."
+            onOpenFile={onOpenFile}
+          />
+
+          <section className="study-section">
+            <h2>Conceptual Echoes</h2>
+            <div className="echo-list">
+              {(investigation?.conceptualEchoes ?? []).map((echo) => (
+                <button key={echo} onClick={() => onStudyConcept(echo)}>
+                  {echo}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <StudyPassageSection
+            title="Claims"
+            passages={investigation?.claims ?? []}
+            empty="No related claims have been indexed in sources/Claims.md."
+            onOpenFile={onOpenFile}
+          />
+
+          <section className="study-section">
+            <h2>Related Objects</h2>
+            <div className="object-ledger">
+              {(investigation?.relatedObjects ?? []).length ? (
+                investigation?.relatedObjects.map((object) => (
+                  <button
+                    key={object.path}
+                    onClick={() => onOpenFile(object.path)}
+                  >
+                    <strong>{object.title}</strong>
+                    <span>{object.path}</span>
+                    <p>{object.excerpt}</p>
+                  </button>
+                ))
+              ) : (
+                <p className="muted">No object records connected yet.</p>
+              )}
+            </div>
+          </section>
+
+          <section className="study-section">
+            <h2>Source Graph</h2>
+            <StudyGraph investigation={investigation} />
+          </section>
+
+          <section className="study-section audit-log">
+            <h2>Coverage Log</h2>
+            {(investigation?.auditLog ?? []).map((entry) => (
+              <p key={entry}>{entry}</p>
+            ))}
+          </section>
         </article>
       )}
     </div>
@@ -1321,8 +1338,8 @@ function SourceReader({
   );
   const canRenderText = Boolean(
     sourceUrl &&
-      source?.kind === "upload" &&
-      source.mimeType.startsWith("text/"),
+    source?.kind === "upload" &&
+    source.mimeType.startsWith("text/"),
   );
   return (
     <article className="study-scroll source-reader" aria-busy={loading}>
@@ -1626,7 +1643,11 @@ function renameSectionTitle(
       renamed = true;
       return { ...section, title };
     }
-    const children = renameSectionTitle(section.children ?? [], sectionId, title);
+    const children = renameSectionTitle(
+      section.children ?? [],
+      sectionId,
+      title,
+    );
     if (children) {
       renamed = true;
       return { ...section, children };

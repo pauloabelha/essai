@@ -5,8 +5,11 @@ import {
   writeBinaryBookFile,
   writeBookFile,
 } from "./files";
+import { createLogger } from "@/lib/server/log";
 import { refreshStudySourceIndex } from "@/lib/study/source-index";
 import type { StorageProvider } from "@/lib/storage/types";
+
+const log = createLogger("projects:sources");
 
 export type SourceKind =
   | "raw"
@@ -57,6 +60,11 @@ export async function appendSource(
 ) {
   const trimmed = value.trim();
   if (!trimmed) throw new Error("Source is required");
+  log.info("append source", {
+    bookId,
+    kind,
+    characters: trimmed.length,
+  });
 
   const rawEntry = formatSourceEntry({ value: trimmed, kind, date });
   await appendToFile(
@@ -78,6 +86,11 @@ export async function appendSource(
     );
   }
   await refreshStudySourceIndex(storage, bookId, date);
+  log.info("source appended", {
+    bookId,
+    path: SOURCE_TARGETS.raw,
+    mirroredPath: kind === "raw" ? null : target,
+  });
 
   return {
     path: SOURCE_TARGETS.raw,
@@ -106,9 +119,19 @@ export async function appendSourceFile(
   const filePath = `sources/files/${kind}/${storedName}`;
   const sourceLink = `[${originalName}](files/${kind}/${storedName})`;
   const value = `File: ${sourceLink}\n\nUploaded source file.`;
+  log.info("append source file", {
+    bookId,
+    kind,
+    originalName,
+    storedName,
+    bytes: file.bytes.byteLength,
+  });
 
   if (!(await hasIdenticalBinaryFile(storage, bookId, filePath, file.bytes))) {
     await writeBinaryBookFile(storage, bookId, filePath, file.bytes);
+    log.info("binary source stored", { bookId, filePath });
+  } else {
+    log.info("binary source reused", { bookId, filePath });
   }
   const result = await appendSource(storage, bookId, value, kind, date);
 
@@ -180,9 +203,7 @@ async function uniqueSourceFilename(
 
   let candidatePath = `sources/files/${kind}/${candidate}`;
   while (await binaryFileExists(storage, bookId, candidatePath)) {
-    if (
-      await hasIdenticalBinaryFile(storage, bookId, candidatePath, bytes)
-    ) {
+    if (await hasIdenticalBinaryFile(storage, bookId, candidatePath, bytes)) {
       return candidate;
     }
     candidate = `${baseName}-${suffix}${extension}`;

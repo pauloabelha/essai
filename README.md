@@ -41,7 +41,7 @@ The Study room is built around:
 - **Source graph**: a restrained relationship map between concepts, source files, claims, and object notes.
 - **Coverage log**: an audit trail of what was read from the archive.
 
-The first implementation uses local source indexes and a hybrid lexical/semantic-neighbor retrieval scaffold. It is designed so future embeddings, BM25, reranking, and GPT adjudication can be added behind the same provenance-first interface.
+The first implementation uses local source indexes and layered retrieval. Literal matches are ranked first, lexical matches can catch nearby forms and small typos, and semantic-neighbor matches can surface adjacent archival language such as `automata`, `mechanical`, or `instructions` for a query like `programmable machines`. Each passage keeps its source file, page or location, confidence, and retrieval method visible so search remains inspectable rather than conversational.
 
 Study mode never writes to `main.md`. Its summaries and pathways are only interpretive views over auxiliary project files. The right capture panel stays available in Study mode, so notes and new sources can be added while the source shelf remains visible.
 
@@ -105,7 +105,7 @@ Every text source capture and uploaded source file also refreshes a backend sear
 sources/.study-index.json
 ```
 
-This generated Study index contains normalized `documents` and `chunks` used by Study search. Text-like uploads such as `.txt`, `.md`, `.csv`, `.json`, and `.xml` have their UTF-8 text extracted into searchable chunks. Binary formats such as PDFs are still represented with stable path, title, size, MIME type, source kind, and metadata-only search text until a richer extractor is added. The shape is intentionally suitable for later Elasticsearch, SQLite FTS, embedding, or reranking ingestion, and it can be regenerated from the readable Markdown ledgers and archived files.
+This generated Study index contains normalized `documents` and `chunks` used by Study search. Text-like uploads such as `.txt`, `.md`, `.csv`, `.json`, and `.xml` have their UTF-8 text extracted into searchable chunks. PDFs are parsed server-side into page-aware text chunks, preserving page provenance for Study results whenever the PDF contains extractable text. Scanned image PDFs may still fall back to metadata-only search until OCR is added. The shape is intentionally suitable for later Elasticsearch, SQLite FTS, embedding, or reranking ingestion, and it can be regenerated from the readable Markdown ledgers and archived files.
 
 ## Architecture
 
@@ -189,7 +189,7 @@ For local development, the default storage root is the repository root. You may 
 ESSAI_DATA_ROOT=/path/to/storage npm run dev
 ```
 
-Production deployments should not rely on Vercel filesystem persistence. Use the storage interface to add a durable provider such as GitHub, Blob, or S3-backed storage.
+The app builds on Vercel with the standard Next.js production build. Production deployments should not rely on Vercel filesystem persistence for the default local storage provider; use the storage interface to add a durable provider such as GitHub, Blob, or S3-backed storage. PDF text extraction runs in server code and is intended for Node.js runtime route handlers, not edge runtime.
 
 ## Source Intake Contract
 
@@ -211,6 +211,28 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Backend Logging
+
+The server logs API calls, source intake, notes, Study index refreshes, and Study search/ranking with colored levels such as `INFO`, `DEBUG`, `WARN`, and `ERROR`.
+
+Use this while debugging search:
+
+```bash
+npm run dev
+```
+
+To quiet the backend logs:
+
+```bash
+ESSAI_LOG=quiet npm run dev
+```
+
+Vitest keeps these logs quiet by default. To inspect backend logs during unit tests:
+
+```bash
+ESSAI_LOG=test npm test
+```
+
 ## Scripts
 
 ```bash
@@ -230,6 +252,7 @@ The test suite covers:
 - preservation of legacy inbox files
 - text source indexing
 - source file storage, sanitization, and Markdown indexing
+- PDF text extraction into page-aware Study chunks
 - Study source index refresh after source capture and upload
 - binary storage list/read/rename/delete behavior
 - write/preview/study mode switching

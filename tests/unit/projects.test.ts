@@ -1,3 +1,6 @@
+// @vitest-environment node
+
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { appendNote, countNoteBlocks } from "@/lib/projects/notes";
 import { createBook, listBooks } from "@/lib/projects/service";
@@ -152,9 +155,7 @@ describe("project creation", () => {
       "sources/files/paper/20260514-213000-Important-Notes-0a6c1577744b.txt";
     expect(result.filePath).toBe(expectedPath);
     expect(
-      await storage.readBinaryFile?.(
-        `projects/my-book/${expectedPath}`,
-      ),
+      await storage.readBinaryFile?.(`projects/my-book/${expectedPath}`),
     ).toEqual(
       new TextEncoder().encode("Source text about programmable machines."),
     );
@@ -179,7 +180,7 @@ describe("project creation", () => {
     const uploadDocument = index.documents.find(
       (document) => document.path === result.filePath,
     );
-    expect(index.version).toBe(2);
+    expect(index.version).toBe(3);
     expect(uploadDocument).toMatchObject({
       kind: "upload",
       searchText: "Source text about programmable machines.",
@@ -188,6 +189,53 @@ describe("project creation", () => {
     expect(
       index.chunks.some((chunk) =>
         chunk.text.includes("programmable machines"),
+      ),
+    ).toBe(true);
+  });
+
+  it("extracts uploaded PDF text into page-aware Study chunks", async () => {
+    const storage = new InMemoryStorageProvider();
+    await createBook(storage, "My Book");
+    const pdfBytes = await readFile(
+      "node_modules/pdf-parse/test/data/04-valid.pdf",
+    );
+    const result = await appendSourceFile(
+      storage,
+      "my-book",
+      {
+        name: "exercise-study.pdf",
+        bytes: pdfBytes,
+      },
+      "paper",
+      new Date("2026-05-14T21:30:00Z"),
+    );
+
+    const index = JSON.parse(
+      await storage.readFile("projects/my-book/sources/.study-index.json"),
+    ) as {
+      version: number;
+      documents: Array<{
+        path: string;
+        searchText: string;
+        metadata: Record<string, unknown>;
+      }>;
+      chunks: Array<{ path: string; page: string; text: string }>;
+    };
+    const uploadDocument = index.documents.find(
+      (document) => document.path === result.filePath,
+    );
+
+    expect(index.version).toBe(3);
+    expect(uploadDocument).toMatchObject({
+      metadata: { extractedText: true, extraction: "pdf-text", pages: 5 },
+    });
+    expect(uploadDocument?.searchText).toContain("nitric oxide");
+    expect(
+      index.chunks.some(
+        (chunk) =>
+          chunk.path === result.filePath &&
+          chunk.page === "1" &&
+          chunk.text.includes("nitric oxide"),
       ),
     ).toBe(true);
   });
@@ -201,7 +249,9 @@ describe("project creation", () => {
       "my-book",
       {
         name: "Important Notes.txt",
-        bytes: new TextEncoder().encode("Source text about programmable machines."),
+        bytes: new TextEncoder().encode(
+          "Source text about programmable machines.",
+        ),
       },
       "raw",
       date,
@@ -211,7 +261,9 @@ describe("project creation", () => {
       "my-book",
       {
         name: "Important Notes.txt",
-        bytes: new TextEncoder().encode("Source text about programmable machines."),
+        bytes: new TextEncoder().encode(
+          "Source text about programmable machines.",
+        ),
       },
       "raw",
       date,

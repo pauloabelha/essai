@@ -128,6 +128,28 @@ Programmable machines appear in the paper index.
     expect(study.sourceCoverage.files).toBe(1);
   });
 
+  it("does not return metadata-only upload passages for unrelated source searches", async () => {
+    const storage = new InMemoryStorageProvider();
+    await createBook(storage, "Book");
+    const upload = await appendSourceFile(
+      storage,
+      "book",
+      {
+        name: "history.pdf",
+        bytes: new TextEncoder().encode("%PDF fake bytes"),
+      },
+      "book",
+      new Date("2026-05-15T10:00:00Z"),
+    );
+
+    const study = await buildStudyInvestigation(storage, "book", {
+      query: "flute",
+      sourcePaths: [upload.filePath],
+    });
+
+    expect(study.directReferences).toEqual([]);
+  });
+
   it("indexes notes taken in the context of a selected source", async () => {
     const storage = new InMemoryStorageProvider();
     await createBook(storage, "Book");
