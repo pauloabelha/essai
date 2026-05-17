@@ -59,8 +59,8 @@ export function PdfStudyReader({
   }, [url]);
 
   const pageNumbers = useMemo(
-    () => Array.from({ length: pageCount }, (_, index) => index + 1),
-    [pageCount],
+    () => visiblePdfPages(pageCount, requestedPage ?? currentPage),
+    [currentPage, pageCount, requestedPage],
   );
 
   const goToPage = (page: number, behavior: ScrollBehavior = "smooth") => {
@@ -362,6 +362,22 @@ interface PdfHighlightRange {
 
 function clampPage(page: number, pageCount: number) {
   return Math.max(1, Math.min(pageCount, Math.round(page)));
+}
+
+function visiblePdfPages(pageCount: number, anchorPage: number) {
+  if (!pageCount) return [];
+  const anchor = clampPage(anchorPage, pageCount);
+  const pages = new Set<number>();
+  for (
+    let page = Math.max(1, anchor - 3);
+    page <= Math.min(pageCount, anchor + 3);
+    page += 1
+  ) {
+    pages.add(page);
+  }
+  pages.add(1);
+  pages.add(pageCount);
+  return [...pages].sort((a, b) => a - b);
 }
 
 function pdfPageElementId(pageNumber: number) {

@@ -2,18 +2,26 @@
 
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
-import type { CSSProperties, Dispatch, RefObject, SetStateAction } from "react";
+import type {
+  CSSProperties,
+  Dispatch,
+  ReactNode,
+  RefObject,
+  SetStateAction,
+} from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   GitBranch,
   Maximize2,
   Moon,
+  PanelLeft,
   Plus,
   Search,
   Save,
   SplitSquareHorizontal,
   Sun,
   Upload,
+  X,
 } from "lucide-react";
 import { useTheme } from "@/components/providers/theme-provider";
 import { MarkdownView } from "@/components/reading/markdown-view";
@@ -33,6 +41,7 @@ const MarkdownEditor = dynamic(
 
 type SaveState = "saved" | "dirty" | "saving";
 type ViewMode = "write" | "preview" | "study";
+type MobilePanel = "navigation" | "capture" | null;
 
 interface LoadedFile {
   path: string;
@@ -124,6 +133,7 @@ export function EssaiApp({
   const [splitPreview, setSplitPreview] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState<MobilePanel>(null);
   const [newBookTitle, setNewBookTitle] = useState("");
   const [notesCaptureOpen, setNotesCaptureOpen] = useState(false);
   const [noteInput, setNoteInput] = useState("");
@@ -362,6 +372,10 @@ export function EssaiApp({
     };
   }, [bookId, files, loadStudyInvestigation, viewMode]);
 
+  useEffect(() => {
+    setMobilePanel(null);
+  }, [bookId, viewMode]);
+
   async function createNewBook(titleFromForm?: string) {
     const title = titleFromForm || window.prompt("Book title");
     if (!title) return;
@@ -561,6 +575,7 @@ export function EssaiApp({
   function selectStudySource(path: string) {
     setStudyTarget(null);
     setStudySelectedSources([path]);
+    setMobilePanel(null);
     setStudySourceReadAt((current) => ({
       ...current,
       [path]: Date.now(),
@@ -575,6 +590,7 @@ export function EssaiApp({
       query: studyQuery,
     });
     setStudySelectedSources([passage.sourceFile]);
+    setMobilePanel(null);
     setStudySourceReadAt((current) => ({
       ...current,
       [passage.sourceFile]: Date.now(),
@@ -712,6 +728,28 @@ export function EssaiApp({
                 Study
               </button>
             </div>
+            {!focusMode ? (
+              <>
+                <button
+                  className="mobile-panel-button"
+                  aria-label={viewMode === "study" ? "Sources" : "Sections"}
+                  title={viewMode === "study" ? "Sources" : "Sections"}
+                  onClick={() => setMobilePanel("navigation")}
+                >
+                  <PanelLeft size={16} />
+                  <span>{viewMode === "study" ? "Sources" : "Sections"}</span>
+                </button>
+                <button
+                  className="mobile-panel-button"
+                  aria-label="Capture"
+                  title="Capture"
+                  onClick={() => setMobilePanel("capture")}
+                >
+                  <Plus size={16} />
+                  <span>Capture</span>
+                </button>
+              </>
+            ) : null}
             {viewMode === "preview" ? (
               <button
                 title="Split preview"
@@ -823,6 +861,55 @@ export function EssaiApp({
           onClose={() => setNotesCaptureOpen(false)}
           onCommit={commitNote}
         />
+      ) : null}
+
+      {mobilePanel ? (
+        <MobilePanelSheet
+          title={
+            mobilePanel === "capture"
+              ? "Capture"
+              : viewMode === "study"
+                ? "Sources"
+                : "Sections"
+          }
+          onClose={() => setMobilePanel(null)}
+        >
+          {mobilePanel === "capture" ? (
+            <InputPane
+              noteValue={noteInput}
+              onNoteChange={setNoteInput}
+              onNoteCommit={commitNote}
+              noteTextareaRef={noteInputRef}
+              sourceValue={sourceInput}
+              pdfFile={pdfFile}
+              pdfInputRef={pdfInputRef}
+              onSourceChange={setSourceInput}
+              onSourceCommit={commitSource}
+              onPdfChange={setPdfFile}
+              onPdfUpload={uploadSourceFile}
+              onPdfDrop={uploadSourceFile}
+            />
+          ) : viewMode === "study" ? (
+            <StudySidebar
+              sources={studySourceFiles}
+              selectedSources={studySelectedSources}
+              investigation={studyInvestigation}
+              onSelectSource={selectStudySource}
+              onSelectPassage={selectStudyPassage}
+            />
+          ) : (
+            <SectionTree
+              sections={manuscriptSections}
+              activePath={openPath}
+              onOpen={(path) => {
+                setMobilePanel(null);
+                loadFile(path);
+              }}
+              onMove={moveManuscriptSection}
+              onRename={renameManuscriptSection}
+            />
+          )}
+        </MobilePanelSheet>
       ) : null}
 
       {commandOpen ? (
@@ -1177,6 +1264,33 @@ function StudySidebar({
         ) : null}
       </section>
     </aside>
+  );
+}
+
+function MobilePanelSheet({
+  title,
+  children,
+  onClose,
+}: {
+  title: string;
+  children: ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="mobile-panel-backdrop" role="presentation">
+      <aside className="mobile-panel-sheet" aria-label={title}>
+        <header>
+          <div>
+            <p className="eyebrow">Mobile</p>
+            <h2>{title}</h2>
+          </div>
+          <button type="button" aria-label="Close panel" onClick={onClose}>
+            <X size={17} />
+          </button>
+        </header>
+        <div className="mobile-panel-content">{children}</div>
+      </aside>
+    </div>
   );
 }
 

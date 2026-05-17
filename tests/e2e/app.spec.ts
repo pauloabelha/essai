@@ -60,9 +60,10 @@ test("create project, capture notes and sources, write, preview, and navigate wi
   await expect(
     page.getByRole("heading", { name: /sample-notes/i }),
   ).toBeVisible();
-  await expect(
-    page.frameLocator(".source-text-viewer").locator("body"),
-  ).toContainText("source notes", { timeout: 10_000 });
+  await expect(page.locator(".source-reader pre")).toContainText(
+    "source notes",
+    { timeout: 10_000 },
+  );
   await page.getByRole("button", { name: "Write" }).click();
   const rawSource = (await (
     await request.get(`/api/books/${book.id}/files/sources/raw.md`)
@@ -100,4 +101,47 @@ test("create project, capture notes and sources, write, preview, and navigate wi
   await page.getByRole("button", { name: "Preview" }).click();
   await page.getByRole("button", { name: "music-cylinder" }).click();
   await expect(page.getByText("objects/music-cylinder.md")).toBeVisible();
+});
+
+test("mobile layout exposes navigation and capture panels", async ({
+  page,
+  request,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  const title = `Mobile Book ${Date.now()}`;
+  const created = await request.post("/api/books", {
+    data: { title },
+  });
+  const book = (await created.json()) as { id: string };
+  await page.goto(`/projects/${book.id}`);
+
+  await expect(page.locator(".app-frame")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Sections" })).toBeVisible();
+  await page.getByRole("button", { name: "Sections" }).click();
+  await expect(
+    page.getByRole("complementary", { name: "Sections" }),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("complementary", { name: "Sections" })
+      .getByRole("button", { name: "Main", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close panel" }).click();
+
+  await page.getByRole("button", { name: "Capture" }).click();
+  const capturePanel = page.getByRole("complementary", { name: "Capture" });
+  await expect(capturePanel).toBeVisible();
+  await capturePanel.getByLabel("Notes input").fill("Mobile note.");
+  await capturePanel
+    .getByRole("button", { name: "Submit", exact: true })
+    .click();
+  await expect(page.getByText("Captured.")).toBeVisible();
+  await capturePanel.getByRole("button", { name: "Close panel" }).click();
+
+  await page.getByRole("button", { name: "Study" }).click();
+  await expect(page.getByRole("button", { name: "Sources" })).toBeVisible();
+  await page.getByRole("button", { name: "Sources" }).click();
+  await expect(
+    page.getByRole("complementary", { name: "Sources", exact: true }),
+  ).toBeVisible();
 });

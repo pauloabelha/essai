@@ -26,6 +26,8 @@ The three modes are:
 
 Focus mode hides both sidebars when the page needs to become only the text.
 
+On mobile, Essai keeps the same writing and study model but collapses the permanent rails into deliberate panels. **Sections** opens manuscript navigation, **Capture** opens the notes and sources pane, and the central surface remains the primary reading or writing area. The desktop layout stays intact on larger screens; the mobile layout is an adaptive shell around the same file-native workflows.
+
 ## Study Mode
 
 Study mode treats the project’s `sources/` directory as the semantic archive layer of the book. It is not a chatbot, an AI sidebar, or a writing assistant. It is a calm research surface for reading sources, filtering the archive, and making new notes without leaving the study view.
@@ -44,6 +46,8 @@ The Study room is built around:
 The first implementation uses local source indexes and layered retrieval. Literal matches are ranked first, lexical matches can catch nearby forms and small typos, and semantic-neighbor matches can surface adjacent archival language such as `automata`, `mechanical`, or `instructions` for a query like `programmable machines`. Each passage keeps its source file, page or location, confidence, and retrieval method visible so search remains inspectable rather than conversational.
 
 PDF sources render inside Study mode with a local PDF.js reader rather than the browser’s embedded PDF plugin. Selecting a search result sends the reader to the cited page without reloading the document and highlights the matching text run on the page when the PDF exposes extractable text. The reader keeps page and zoom controls close to the source, so result navigation feels like moving through an archive rather than opening separate files.
+
+For long PDFs, Study renders a small page window around the active page instead of mounting the whole document at once. This keeps source reading responsive on phones while preserving page jumps, zoom controls, and match highlighting.
 
 Study mode never writes to `main.md`. Its summaries and pathways are only interpretive views over auxiliary project files. The right capture panel stays available in Study mode, so notes and new sources can be added while the source shelf remains visible.
 

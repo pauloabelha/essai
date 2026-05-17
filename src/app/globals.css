@@ -385,6 +385,10 @@ summary {
   font-weight: 650;
 }
 
+.mobile-panel-button {
+  display: none;
+}
+
 .workspace {
   flex: 1;
   min-height: 0;
@@ -803,6 +807,10 @@ summary {
 }
 
 .floating-notes {
+  display: none;
+}
+
+.mobile-panel-backdrop {
   display: none;
 }
 
@@ -1637,7 +1645,14 @@ summary {
 }
 
 @media (max-width: 720px) {
+  html,
+  body {
+    height: 100dvh;
+    overflow: hidden;
+  }
+
   .app-frame {
+    height: 100dvh;
     grid-template-columns: 1fr;
   }
 
@@ -1650,17 +1665,237 @@ summary {
     display: none;
   }
 
+  .center-pane {
+    min-height: 0;
+  }
+
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 12;
+    min-height: auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+
+  .topbar > div:first-child {
+    min-width: 0;
+  }
+
+  .topbar strong,
+  .topbar span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .toolbar {
+    width: 100%;
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 6px;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .mode-switch {
+    flex: 1 0 176px;
+    min-width: 0;
+  }
+
+  .mode-switch button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 8px 7px;
+    font-size: 12px;
+  }
+
+  .mobile-panel-button {
+    display: inline-flex;
+    min-width: 38px;
+    height: 38px;
+    padding: 0 9px;
+    border-color: color-mix(in srgb, var(--accent) 24%, var(--rule));
+  }
+
+  .mobile-panel-button span {
+    display: none;
+  }
+
+  .workspace,
+  .study-surface {
+    min-height: 0;
+  }
+
+  .preview-shell {
+    padding: 28px 18px 96px;
+  }
+
+  .cm-editor {
+    height: 100%;
+  }
+
   .study-inquiry {
-    grid-template-columns: 1fr;
+    padding: 12px;
+  }
+
+  .study-inquiry label {
+    min-height: 48px;
+    padding: 10px 12px;
+  }
+
+  .study-inquiry input[aria-label="Search current source"] {
+    font-size: 18px;
+  }
+
+  .study-scroll {
+    padding: 24px 14px 92px;
+  }
+
+  .source-reader-header {
+    margin-bottom: 16px;
+    padding-bottom: 16px;
+  }
+
+  .source-reader-header h1 {
+    font-size: clamp(27px, 9vw, 42px);
+  }
+
+  .concept-meta {
+    gap: 6px;
+  }
+
+  .concept-meta span {
+    max-width: 100%;
+    overflow-wrap: anywhere;
+  }
+
+  .concept-header h1 {
+    font-size: clamp(38px, 14vw, 58px);
+  }
+
+  .concept-header p {
+    font-size: 18px;
+  }
+
+  .passage-ledger button,
+  .object-ledger button {
+    padding: 16px 0;
   }
 
   .passage-ledger dl {
     grid-template-columns: 1fr 1fr;
   }
 
-  .toolbar {
-    flex-wrap: wrap;
-    justify-content: flex-end;
+  .pdf-study-reader {
+    width: 100%;
+  }
+
+  .pdf-study-toolbar {
+    top: -24px;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .pdf-study-controls {
+    width: 100%;
+    display: grid;
+    grid-template-columns: 34px 1fr 34px 34px 34px;
+  }
+
+  .pdf-study-controls button,
+  .pdf-study-controls input {
+    width: 100%;
+    height: 34px;
+  }
+
+  .pdf-study-pages {
+    gap: 16px;
+  }
+
+  .pdf-study-page {
+    width: 100%;
+    padding: 8px;
+  }
+
+  .pdf-study-page canvas,
+  .pdf-study-placeholder {
+    width: 100%;
+    min-height: auto;
+  }
+
+  .pdf-study-text-layer {
+    inset: 8px auto auto;
+  }
+
+  .source-reader pre {
+    padding: 16px;
+    font-size: 16px;
+  }
+
+  .mobile-panel-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    display: grid;
+    align-items: end;
+    background: color-mix(in srgb, var(--ink) 34%, transparent);
+  }
+
+  .mobile-panel-sheet {
+    width: 100%;
+    max-height: min(86dvh, 760px);
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);
+    border: 1px solid color-mix(in srgb, var(--rule) 90%, transparent);
+    border-radius: 14px 14px 0 0;
+    background: var(--surface);
+    box-shadow: 0 -20px 60px color-mix(in srgb, var(--ink) 22%, transparent);
+    overflow: hidden;
+  }
+
+  .mobile-panel-sheet > header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    border-bottom: 1px solid var(--rule);
+    padding: 14px 16px;
+  }
+
+  .mobile-panel-sheet h2 {
+    margin: 0;
+    font-family: var(--font-serif), Georgia, serif;
+    font-size: 25px;
+    line-height: 1.1;
+  }
+
+  .mobile-panel-content {
+    min-height: 0;
+    overflow: auto;
+    padding: 16px;
+  }
+
+  .mobile-panel-content .study-sidebar {
+    min-height: auto;
+    display: grid;
+    border-right: 0;
+    background: transparent;
+    padding: 0;
+  }
+
+  .mobile-panel-content .input-pane {
+    gap: 16px;
+  }
+
+  .mobile-panel-content .notes-capture-box,
+  .mobile-panel-content .source-capture-box {
+    grid-template-rows: auto minmax(150px, 24dvh) auto auto;
   }
 
   .floating-notes {
