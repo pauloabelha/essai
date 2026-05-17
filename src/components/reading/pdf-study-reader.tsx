@@ -16,11 +16,13 @@ export function PdfStudyReader({
   title,
   targetPage,
   targetQuote,
+  targetQuery,
 }: {
   url: string;
   title: string;
   targetPage: number | null;
   targetQuote?: string;
+  targetQuery?: string;
 }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [pageCount, setPageCount] = useState(0);
@@ -150,6 +152,7 @@ export function PdfStudyReader({
                 scale={scale}
                 active={pageNumber === requestedPage}
                 targetQuote={pageNumber === requestedPage ? targetQuote : ""}
+                targetQuery={pageNumber === requestedPage ? targetQuery : ""}
                 onVisible={setCurrentPage}
               />
             ))
@@ -166,6 +169,7 @@ function PdfStudyPage({
   scale,
   active,
   targetQuote,
+  targetQuery,
   onVisible,
 }: {
   pdf: PDFDocumentProxy;
@@ -173,6 +177,7 @@ function PdfStudyPage({
   scale: number;
   active: boolean;
   targetQuote?: string;
+  targetQuery?: string;
   onVisible: (pageNumber: number) => void;
 }) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
@@ -265,6 +270,10 @@ function PdfStudyPage({
     () => findPdfHighlightRange(textItems, targetQuote ?? ""),
     [textItems, targetQuote],
   );
+  const highlightTerms = useMemo(
+    () => termsForDirectHighlight(targetQuery ?? ""),
+    [targetQuery],
+  );
 
   return (
     <figure
@@ -288,6 +297,7 @@ function PdfStudyPage({
               index={index}
               scale={scale}
               highlightRange={highlightRange}
+              highlightTerms={highlightTerms}
             />
           ))}
         </div>
@@ -303,17 +313,21 @@ function PdfTextRun({
   index,
   scale,
   highlightRange,
+  highlightTerms,
 }: {
   item: PdfTextItem;
   index: number;
   scale: number;
   highlightRange: PdfHighlightRange | null;
+  highlightTerms: string[];
 }) {
   const transform = item.transform;
+  const normalizedText = item.str.toLowerCase();
   const highlighted = Boolean(
-    highlightRange &&
-    index >= highlightRange.start &&
-    index <= highlightRange.end,
+    highlightTerms.some((term) => normalizedText.includes(term)) ||
+    (highlightRange &&
+      index >= highlightRange.start &&
+      index <= highlightRange.end),
   );
   return (
     <span
@@ -384,6 +398,24 @@ function findPdfHighlightRange(
 
   if (!best || best.score < Math.min(2, queryTerms.length)) return null;
   return { start: best.start, end: best.end };
+}
+
+function termsForDirectHighlight(query: string) {
+  return tokenizeForHighlight(query)
+    .filter((term) => term.length > 2)
+    .flatMap((term) => [term, stemHighlightTerm(term)])
+    .filter(
+      (term, index, terms) => term.length > 2 && terms.indexOf(term) === index,
+    );
+}
+
+function stemHighlightTerm(term: string) {
+  if (term.length > 5 && term.endsWith("ies")) return `${term.slice(0, -3)}y`;
+  if (term.length > 5 && term.endsWith("ing")) return term.slice(0, -3);
+  if (term.length > 4 && term.endsWith("ed")) return term.slice(0, -2);
+  if (term.length > 4 && term.endsWith("es")) return term.slice(0, -2);
+  if (term.length > 3 && term.endsWith("s")) return term.slice(0, -1);
+  return term;
 }
 
 function tokenizeForHighlight(value: string) {

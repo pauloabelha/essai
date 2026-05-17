@@ -102,6 +102,7 @@ interface StudyTarget {
   sourceFile: string;
   page: string;
   quote: string;
+  query: string;
 }
 
 export function EssaiApp({
@@ -571,6 +572,7 @@ export function EssaiApp({
       sourceFile: passage.sourceFile,
       page: passage.page,
       quote: passage.quote,
+      query: studyQuery,
     });
     setStudySelectedSources([passage.sourceFile]);
     setStudySourceReadAt((current) => ({
@@ -1377,6 +1379,8 @@ function SourceReader({
       : null;
   const targetPdfQuote =
     target && target.sourceFile === source?.path ? target.quote : "";
+  const targetPdfQuery =
+    target && target.sourceFile === source?.path ? target.query : "";
   const canRenderPdf = Boolean(
     sourceUrlBase && source?.mimeType === "application/pdf",
   );
@@ -1425,6 +1429,7 @@ function SourceReader({
           title={source?.title ?? "PDF source"}
           targetPage={targetPdfPage}
           targetQuote={targetPdfQuote}
+          targetQuery={targetPdfQuery}
         />
       ) : canRenderText ? (
         <pre
