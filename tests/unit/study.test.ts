@@ -15,7 +15,7 @@ describe("study archive", () => {
 
 Type: book
 
-The Jacquard loom encoded repeatable symbolic instructions for patterned weaving. p. 211
+Programmable machines appear in the Jacquard loom's encoded repeatable symbolic instructions for patterned weaving. p. 211
 
 ---
 `,
@@ -26,6 +26,7 @@ The Jacquard loom encoded repeatable symbolic instructions for patterned weaving
       "projects/book/objects/jacquard-loom.md": `# Jacquard loom
 
 An object note for patterned instruction.
+Programmable machines belong in this object history.
 `,
     });
 
@@ -101,6 +102,83 @@ Programmable machines appear in the paper index.
         (passage) => passage.sourceFile === "sources/Papers.md",
       ),
     ).toBe(true);
+  });
+
+  it("finds misspelled source queries with fuzzy ranked matches", async () => {
+    const storage = new InMemoryStorageProvider({
+      "projects/book/book.json": "{}",
+      "projects/book/sources/Articles.md": `# Articles
+
+Koetsier, T., 2001. On the prehistory of programmable machines: musical automata, looms, calculators. Mechanism and Machine theory, 36(5), pp.589-603.
+`,
+    });
+
+    const study = await buildStudyInvestigation(storage, "book", {
+      query: "machien",
+      exhaustive: true,
+    });
+
+    expect(study.directReferences[0]).toMatchObject({
+      sourceFile: "sources/Articles.md",
+      retrievalMethod: "Lexical Match",
+    });
+    expect(study.directReferences[0].quote).toContain("Machine theory");
+  });
+
+  it("deduplicates adjacent PDF chunks from the same uploaded page", async () => {
+    const storage = new InMemoryStorageProvider({
+      "projects/book/book.json": "{}",
+      "projects/book/sources/.study-index.json": JSON.stringify({
+        version: 3,
+        updatedAt: "2026-05-18T00:00:00.000Z",
+        documents: [
+          {
+            id: "pdf",
+            path: "sources/files/book/sample.pdf",
+            title: "sample.pdf",
+            kind: "upload",
+            sourceType: "book",
+            mimeType: "application/pdf",
+            sizeBytes: 1,
+            searchText: "automatic automatic",
+            metadata: { kind: "upload", extraction: "pdf-text" },
+          },
+        ],
+        chunks: [
+          {
+            id: "pdf:chunk:1",
+            documentId: "pdf",
+            chunkIndex: 1,
+            path: "sources/files/book/sample.pdf",
+            sourceType: "book",
+            page: "295",
+            text: "The movement was automatic near the boundary.",
+            metadata: { kind: "upload", title: "sample.pdf" },
+          },
+          {
+            id: "pdf:chunk:2",
+            documentId: "pdf",
+            chunkIndex: 2,
+            path: "sources/files/book/sample.pdf",
+            sourceType: "book",
+            page: "295",
+            text: "automatic exclusion appeared in the adjacent chunk.",
+            metadata: { kind: "upload", title: "sample.pdf" },
+          },
+        ],
+      }),
+      "projects/book/sources/files/book/sample.pdf": "%PDF",
+    });
+
+    const study = await buildStudyInvestigation(storage, "book", {
+      query: "automat",
+    });
+
+    expect(study.directReferences).toHaveLength(1);
+    expect(study.directReferences[0]).toMatchObject({
+      sourceFile: "sources/files/book/sample.pdf",
+      page: "295",
+    });
   });
 
   it("limits retrieval to a selected uploaded source file", async () => {

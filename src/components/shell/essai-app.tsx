@@ -100,6 +100,11 @@ interface StudyInvestigation {
 interface StudyPassage {
   id: string;
   quote: string;
+  matchTerms?: string[];
+  resolvedTerms?: string[];
+  expandedTerms?: string[];
+  exactPhraseCandidate?: string | null;
+  query?: string;
   sourceFile: string;
   sourceType: string;
   page: string;
@@ -108,10 +113,12 @@ interface StudyPassage {
 }
 
 interface StudyTarget {
+  commandId: string;
   sourceFile: string;
   page: string;
   quote: string;
   query: string;
+  matchTerms: string[];
 }
 
 export function EssaiApp({
@@ -155,6 +162,7 @@ export function EssaiApp({
   const studyReadOrderLoadedRef = useRef(false);
   const noteInputRef = useRef<HTMLTextAreaElement | null>(null);
   const pdfInputRef = useRef<HTMLInputElement | null>(null);
+  const studyTargetSerial = useRef(0);
   const { theme, setTheme } = useTheme();
   const router = useRouter();
 
@@ -583,11 +591,14 @@ export function EssaiApp({
   }
 
   function selectStudyPassage(passage: StudyPassage) {
+    studyTargetSerial.current += 1;
     setStudyTarget({
+      commandId: `${passage.id}:${studyTargetSerial.current}`,
       sourceFile: passage.sourceFile,
       page: passage.page,
       quote: passage.quote,
       query: studyQuery,
+      matchTerms: passage.resolvedTerms ?? passage.matchTerms ?? [],
     });
     setStudySelectedSources([passage.sourceFile]);
     setMobilePanel(null);
@@ -1495,6 +1506,10 @@ function SourceReader({
     target && target.sourceFile === source?.path ? target.quote : "";
   const targetPdfQuery =
     target && target.sourceFile === source?.path ? target.query : "";
+  const targetPdfTerms =
+    target && target.sourceFile === source?.path ? target.matchTerms : [];
+  const targetPdfCommand =
+    target && target.sourceFile === source?.path ? target.commandId : "";
   const canRenderPdf = Boolean(
     sourceUrlBase && source?.mimeType === "application/pdf",
   );
@@ -1541,9 +1556,11 @@ function SourceReader({
         <PdfStudyReader
           url={sourceUrlBase}
           title={source?.title ?? "PDF source"}
+          targetKey={targetPdfCommand}
           targetPage={targetPdfPage}
           targetQuote={targetPdfQuote}
           targetQuery={targetPdfQuery}
+          targetTerms={targetPdfTerms}
         />
       ) : canRenderText ? (
         <pre

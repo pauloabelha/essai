@@ -1,4 +1,5 @@
 import { flattenFiles } from "@/lib/markdown/wiki";
+import MiniSearch, { type SearchResult } from "minisearch";
 import { readBookFile, listBookFiles } from "@/lib/projects/files";
 import { bookRoot } from "@/lib/projects/service";
 import { createLogger } from "@/lib/server/log";
@@ -14,6 +15,11 @@ const log = createLogger("study:archive");
 export interface StudyPassage {
   id: string;
   quote: string;
+  matchTerms: string[];
+  resolvedTerms: string[];
+  expandedTerms: string[];
+  exactPhraseCandidate: string | null;
+  query: string;
   sourceFile: string;
   sourceType: string;
   page: string;
@@ -77,37 +83,6 @@ export interface StudySelectedSource {
   extraction: string;
 }
 
-const SEMANTIC_NEIGHBORS: Record<string, string[]> = {
-  programmable: [
-    "automata",
-    "instruction",
-    "instructions",
-    "encoded",
-    "repeatable",
-    "program",
-    "stored",
-    "patterned",
-  ],
-  machines: [
-    "mechanism",
-    "mechanical",
-    "machinery",
-    "loom",
-    "looms",
-    "calculator",
-    "automaton",
-    "automata",
-  ],
-  computation: [
-    "calculation",
-    "calculator",
-    "symbolic",
-    "cybernetics",
-    "algorithm",
-  ],
-  source: ["evidence", "quote", "citation", "paper", "book"],
-};
-
 const DEFAULT_ECHOES = [
   "automata",
   "symbolic systems",
@@ -117,12 +92,15 @@ const DEFAULT_ECHOES = [
   "stored instructions",
 ];
 
-type RetrievalMethod = "Exact Match" | "Lexical Match" | "Semantic Neighbor";
+type RetrievalMethod = "Exact Match" | "Lexical Match";
 
 interface RankedChunk {
   chunk: StudyIndexChunk;
   index: number;
   score: number;
+  matchTerms: string[];
+  expandedTerms: string[];
+  exactPhraseCandidate: string | null;
   retrievalMethod: RetrievalMethod;
 }
 
@@ -211,19 +189,36 @@ export async function buildStudyInvestigation(
       text: item.chunk.text.slice(0, 90),
     })),
   });
-  const directReferences = ranked
-    .filter(
+  const directReferences = dedupeRankedPassages(
+    ranked.filter(
       (chunk) => chunk.score > 0 && chunk.chunk.path !== "sources/Claims.md",
-    )
+    ),
+  )
     .slice(0, exhaustive ? 8 : 5)
     .map((chunk) =>
-      passageFromChunk(chunk.chunk, query, chunk.score, chunk.retrievalMethod),
+      passageFromChunk(
+        chunk.chunk,
+        query,
+        chunk.score,
+        chunk.retrievalMethod,
+        chunk.matchTerms,
+        chunk.expandedTerms,
+        chunk.exactPhraseCandidate,
+      ),
     );
   const claimReferences = rankChunks(claims, query)
     .filter((chunk) => chunk.score > 0)
     .slice(0, 5)
     .map((chunk) =>
-      passageFromChunk(chunk.chunk, query, chunk.score, chunk.retrievalMethod),
+      passageFromChunk(
+        chunk.chunk,
+        query,
+        chunk.score,
+        chunk.retrievalMethod,
+        chunk.matchTerms,
+        chunk.expandedTerms,
+        chunk.exactPhraseCandidate,
+      ),
     );
   const relatedObjects = rankObjects(objects, query).slice(0, 6);
   const evidenceTexts = positiveRanked.map((item) => item.chunk.text);
@@ -235,9 +230,7 @@ export async function buildStudyInvestigation(
   const lexicalMatches = positiveRanked.filter(
     (item) => item.retrievalMethod === "Lexical Match",
   ).length;
-  const semanticMatches = positiveRanked.filter(
-    (item) => item.retrievalMethod === "Semantic Neighbor",
-  ).length;
+  const semanticMatches = 0;
 
   return {
     query,
@@ -259,8 +252,8 @@ export async function buildStudyInvestigation(
           ? `Exhaustive scholarly audit across ${selectedSources.size} selected source index${selectedSources.size === 1 ? "" : "es"}`
           : "Exhaustive scholarly audit across /sources"
         : selectedSources.size
-          ? `Fast semantic search across ${selectedSources.size} selected source index${selectedSources.size === 1 ? "" : "es"}`
-          : "Fast semantic search across indexed source passages",
+          ? `Fast lexical search across ${selectedSources.size} selected source index${selectedSources.size === 1 ? "" : "es"}`
+          : "Fast lexical search across indexed source passages",
     },
     directReferences,
     conceptualEchoes,
@@ -272,11 +265,30 @@ export async function buildStudyInvestigation(
       `Read ${sourceMarkdown.length} Markdown index${sourceMarkdown.length === 1 ? "" : "es"} from /sources.`,
       `Identified ${uploadedFiles.length} uploaded source files.`,
       `Examined ${chunks.length} indexed source chunks${exhaustive ? " sequentially for recall" : " with fast scoring"}.`,
-      `Found ${positiveRanked.length} relevant passage${positiveRanked.length === 1 ? "" : "s"}: ${exactMatches} exact, ${lexicalMatches} lexical, ${semanticMatches} semantic-neighbor.`,
+      `Found ${positiveRanked.length} relevant passage${positiveRanked.length === 1 ? "" : "s"}: ${exactMatches} exact, ${lexicalMatches} lexical.`,
       `Study index refreshed at ${index.updatedAt}.`,
       `Connected ${relatedObjects.length} related object records from /objects.`,
     ],
   };
+}
+
+function dedupeRankedPassages(chunks: RankedChunk[]) {
+  const seen = new Set<string>();
+  return chunks.filter((item) => {
+    const key =
+      item.chunk.metadata.kind === "upload"
+        ? `${item.chunk.path}:${item.chunk.page}`
+        : `${item.chunk.path}:${item.chunk.page}:${normalizedPassageKey(
+            item.chunk.text,
+          )}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function normalizedPassageKey(text: string) {
+  return normalizeText(text).slice(0, 180);
 }
 
 function selectedSourceFromIndex(
@@ -299,12 +311,41 @@ function selectedSourceFromIndex(
 
 function rankChunks(chunks: StudyIndexChunk[], query: string): RankedChunk[] {
   const terms = queryTerms(query);
+  const expandedTerms = expandedSearchTerms(query);
+  const search = new MiniSearch<{
+    id: string;
+    text: string;
+  }>({
+    fields: ["text"],
+    idField: "id",
+    storeFields: ["id"],
+    searchOptions: {
+      combineWith: "OR",
+      prefix: (term) => term.length > 3,
+      fuzzy: (term) => (term.length > 4 ? 1 : false),
+      weights: { fuzzy: 0.6, prefix: 0.75 },
+    },
+  });
+  search.addAll(
+    chunks.map((chunk, index) => ({
+      id: String(index),
+      text: chunk.text,
+    })),
+  );
+  const searchResults = new Map(
+    search
+      .search(expandedTerms.join(" "))
+      .map((result) => [String(result.id), result]),
+  );
+
   return chunks
     .map((chunk, index) => {
-      const result = scoreText(chunk.text, terms);
+      const searchResult = searchResults.get(String(index));
+      const result = scoreText(chunk.text, terms, searchResult);
       return {
         chunk,
         index,
+        expandedTerms: expandedTerms.filter((term) => !terms.base.includes(term)),
         ...result,
       };
     })
@@ -344,10 +385,18 @@ function passageFromChunk(
   query: string,
   score: number,
   retrievalMethod: RetrievalMethod,
+  matchTerms: string[] = [],
+  expandedTerms: string[] = [],
+  exactPhraseCandidate: string | null = null,
 ): StudyPassage {
   return {
     id: chunk.id,
-    quote: excerptFor(chunk.text, excerptTerms(query)),
+    quote: excerptFor(chunk.text, excerptTerms(query, matchTerms)),
+    matchTerms,
+    resolvedTerms: matchTerms,
+    expandedTerms,
+    exactPhraseCandidate,
+    query,
     sourceFile:
       chunk.sourceType === "note" && chunk.metadata.sourcePath
         ? String(chunk.metadata.sourcePath)
@@ -412,25 +461,46 @@ function buildGraph(
 function queryTerms(query: string) {
   const literal = normalizeText(query);
   const base = tokenize(query);
-  const semantic = [
-    ...new Set(base.flatMap((term) => SEMANTIC_NEIGHBORS[term] ?? [])),
-  ];
-  return { literal, base, semantic };
+  return { literal, base };
 }
 
-function scoreText(text: string, terms: ReturnType<typeof queryTerms>) {
+function expandedSearchTerms(query: string) {
+  const terms = tokenize(query);
+  const expanded = new Set(terms);
+  for (const term of terms) {
+    for (const variant of adjacentTranspositions(term)) {
+      expanded.add(variant);
+    }
+  }
+  return [...expanded];
+}
+
+function adjacentTranspositions(term: string) {
+  if (term.length < 5 || term.length > 14) return [];
+  const variants: string[] = [];
+  for (let index = 0; index < term.length - 1; index += 1) {
+    if (term[index] === term[index + 1]) continue;
+    variants.push(
+      `${term.slice(0, index)}${term[index + 1]}${term[index]}${term.slice(index + 2)}`,
+    );
+  }
+  return variants;
+}
+
+function scoreText(
+  text: string,
+  terms: ReturnType<typeof queryTerms>,
+  searchResult?: SearchResult,
+) {
   const haystack = normalizeText(text);
   const words = tokenize(text);
   const wordStems = words.map(stemTerm);
   let exact = 0;
   let lexical = 0;
-  let semantic = 0;
+  const exactPhraseCandidate =
+    terms.literal && haystack.includes(terms.literal) ? terms.literal : null;
 
-  if (
-    terms.literal &&
-    terms.literal.length > 2 &&
-    haystack.includes(terms.literal)
-  ) {
+  if (exactPhraseCandidate) {
     exact += terms.base.length > 1 ? 8 : 4;
   }
 
@@ -450,25 +520,27 @@ function scoreText(text: string, terms: ReturnType<typeof queryTerms>) {
     }
   }
 
-  for (const term of terms.semantic) {
-    semantic += countOccurrences(haystack, term) * 0.85;
+  const searchScore = searchResult?.score ?? 0;
+  const matchTerms = searchResult?.terms ?? [];
+  if (searchResult) {
+    lexical += searchScore;
   }
 
-  const score = exact + lexical + semantic;
+  const score = exact + lexical;
   return {
     score,
-    retrievalMethod: dominantMethod(exact, lexical, semantic),
+    exactPhraseCandidate,
+    matchTerms,
+    retrievalMethod: dominantMethod(exact, lexical),
   };
 }
 
 function dominantMethod(
   exact: number,
   lexical: number,
-  semantic: number,
 ): RetrievalMethod {
-  if (exact >= lexical && exact >= semantic && exact > 0) return "Exact Match";
-  if (lexical >= semantic && lexical > 0) return "Lexical Match";
-  return semantic > 0 ? "Semantic Neighbor" : "Lexical Match";
+  if (exact >= lexical && exact > 0) return "Exact Match";
+  return "Lexical Match";
 }
 
 function deriveRelatedConcepts(query: string, passages: string[]) {
@@ -519,9 +591,9 @@ function excerptFor(text: string, terms: string[]) {
   return `${start ? "..." : ""}${oneLine.slice(start, end)}${end < oneLine.length ? "..." : ""}`;
 }
 
-function excerptTerms(query: string) {
+function excerptTerms(query: string, matchTerms: string[] = []) {
   const terms = queryTerms(query);
-  return [...new Set([...terms.base, ...terms.semantic])];
+  return [...new Set([...matchTerms, ...terms.base])];
 }
 
 function normalizeText(text: string) {

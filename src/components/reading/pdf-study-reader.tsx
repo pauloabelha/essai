@@ -5,6 +5,12 @@ import * as pdfjs from "pdfjs-dist";
 import { ChevronLeft, ChevronRight, Minus, Plus } from "lucide-react";
 import type { CSSProperties } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { PdfHighlightLayer } from "@/components/study/PdfHighlightLayer";
+import { resolvePdfMatches } from "@/lib/pdf/pdfMatchResolver";
+import {
+  reconstructPdfPage,
+  type ReconstructedPdfPage,
+} from "@/lib/pdf/pdfTextMap";
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL(
   "pdfjs-dist/build/pdf.worker.min.mjs",
@@ -14,22 +20,34 @@ pdfjs.GlobalWorkerOptions.workerSrc = new URL(
 export function PdfStudyReader({
   url,
   title,
+  targetKey,
   targetPage,
   targetQuote,
   targetQuery,
+  targetTerms,
 }: {
   url: string;
   title: string;
+  targetKey?: string;
   targetPage: number | null;
   targetQuote?: string;
   targetQuery?: string;
+  targetTerms?: string[];
 }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [pageCount, setPageCount] = useState(0);
   const [currentPage, setCurrentPage] = useState(1);
   const [requestedPage, setRequestedPage] = useState<number | null>(null);
+  const [scrollRequest, setScrollRequest] = useState<{
+    page: number;
+    behavior: ScrollBehavior;
+    key: number;
+  } | null>(null);
   const [scale, setScale] = useState(1.15);
   const [status, setStatus] = useState("Opening source");
+  const scrollRequestSerial = useRef(0);
+  const [pageCache] = useState(() => new Map<string, ReconstructedPdfPage>());
+  const fingerprint = useMemo(() => pdfFingerprint(pdf, url), [pdf, url]);
 
   useEffect(() => {
     if (!url) return;
@@ -68,19 +86,30 @@ export function PdfStudyReader({
     const nextPage = clampPage(page, pageCount);
     setRequestedPage(nextPage);
     setCurrentPage(nextPage);
-    requestAnimationFrame(() => {
-      document
-        .getElementById(pdfPageElementId(nextPage))
-        ?.scrollIntoView({ block: "start", behavior });
+    scrollRequestSerial.current += 1;
+    setScrollRequest({
+      page: nextPage,
+      behavior,
+      key: scrollRequestSerial.current,
     });
   };
+
+  useEffect(() => {
+    if (!scrollRequest || !pageNumbers.includes(scrollRequest.page)) return;
+    const frame = window.requestAnimationFrame(() => {
+      document
+        .getElementById(pdfPageElementId(scrollRequest.page))
+        ?.scrollIntoView({ block: "start", behavior: scrollRequest.behavior });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [pageNumbers, scrollRequest]);
 
   useEffect(() => {
     if (!targetPage || !pageCount) return;
     goToPage(targetPage);
     // goToPage reads refs and state; target changes are the command boundary.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [targetPage, pageCount]);
+  }, [targetKey, targetPage, pageCount]);
 
   return (
     <div className="pdf-study-reader" aria-label={title}>
@@ -153,6 +182,10 @@ export function PdfStudyReader({
                 active={pageNumber === requestedPage}
                 targetQuote={pageNumber === requestedPage ? targetQuote : ""}
                 targetQuery={pageNumber === requestedPage ? targetQuery : ""}
+                targetTerms={pageNumber === requestedPage ? targetTerms : []}
+                cache={pageCache}
+                fingerprint={fingerprint}
+                cacheScope={url}
                 onVisible={setCurrentPage}
               />
             ))
@@ -170,6 +203,10 @@ function PdfStudyPage({
   active,
   targetQuote,
   targetQuery,
+  targetTerms,
+  cache,
+  fingerprint,
+  cacheScope,
   onVisible,
 }: {
   pdf: PDFDocumentProxy;
@@ -178,15 +215,22 @@ function PdfStudyPage({
   active: boolean;
   targetQuote?: string;
   targetQuery?: string;
+  targetTerms?: string[];
+  cache: Map<string, ReconstructedPdfPage>;
+  fingerprint: string;
+  cacheScope: string;
   onVisible: (pageNumber: number) => void;
 }) {
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const textLayerRef = useRef<HTMLDivElement | null>(null);
+  const highlightLayerRef = useRef<HTMLDivElement | null>(null);
   const [visible, setVisible] = useState(false);
   const [rendered, setRendered] = useState(false);
-  const [textItems, setTextItems] = useState<PdfTextItem[]>([]);
+  const [reconstructedPage, setReconstructedPage] =
+    useState<ReconstructedPdfPage | null>(null);
+  const [activeMatchIndex, setActiveMatchIndex] = useState(0);
   const [pageSize, setPageSize] = useState({ width: 760, height: 1040 });
+  const debug = process.env.NEXT_PUBLIC_PDF_HIGHLIGHT_DEBUG === "true";
 
   useEffect(() => {
     const node = wrapperRef.current;
@@ -195,10 +239,12 @@ function PdfStudyPage({
       ([entry]) => {
         if (entry.isIntersecting) {
           setVisible(true);
-          onVisible(pageNumber);
+          if (entry.intersectionRatio >= 0.45) {
+            onVisible(pageNumber);
+          }
         }
       },
-      { rootMargin: "1200px 0px" },
+      { rootMargin: "1200px 0px", threshold: [0, 0.45] },
     );
     observer.observe(node);
     return () => {
@@ -214,6 +260,13 @@ function PdfStudyPage({
     void pdf.getPage(pageNumber).then(async (page) => {
       if (cancelled || !canvasRef.current) return;
       const viewport = page.getViewport({ scale });
+      const cacheKey = pdfPageCacheKey({
+        cacheScope,
+        page: pageNumber,
+        scale: viewport.scale,
+        rotation: viewport.rotation,
+        fingerprint,
+      });
       const pixelRatio = window.devicePixelRatio || 1;
       const canvas = canvasRef.current;
       const context = canvas.getContext("2d", { alpha: false });
@@ -228,21 +281,35 @@ function PdfStudyPage({
       const textContent = await page.getTextContent({
         includeMarkedContent: false,
       });
-      setTextItems(
-        textContent.items.flatMap((item) =>
-          "str" in item && item.str.trim()
-            ? [
-                {
-                  str: item.str,
-                  transform: item.transform as number[],
-                  width: item.width,
-                  height: item.height,
-                  fontName: item.fontName,
-                },
-              ]
-            : [],
-        ),
-      );
+      const cached = cache.get(cacheKey);
+      const reconstructed =
+        cached ??
+        reconstructPdfPage({
+          page: pageNumber,
+          items: textContent.items.flatMap((item) =>
+            "str" in item && item.str.trim()
+              ? [
+                  {
+                    str: item.str,
+                    transform: item.transform as number[],
+                    width: item.width,
+                    height: item.height,
+                    fontName: item.fontName,
+                  },
+                ]
+              : [],
+          ),
+          viewport: {
+            width: viewport.width,
+            height: viewport.height,
+            scale: viewport.scale,
+            rotation: viewport.rotation,
+            transform: viewport.transform,
+          },
+          fingerprint,
+        });
+      if (!cached) cache.set(cacheKey, reconstructed);
+      setReconstructedPage(reconstructed);
 
       renderTask = page.render({
         canvasContext: context,
@@ -258,22 +325,31 @@ function PdfStudyPage({
       cancelled = true;
       renderTask?.cancel();
     };
-  }, [pdf, pageNumber, scale, visible]);
+  }, [cache, cacheScope, fingerprint, pdf, pageNumber, scale, visible]);
 
   useEffect(() => {
-    if (!active || !textLayerRef.current) return;
-    const mark = textLayerRef.current.querySelector("[data-pdf-match='true']");
-    mark?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [active, textItems, targetQuote]);
+    setActiveMatchIndex(0);
+  }, [targetQuote, targetQuery, targetTerms]);
 
-  const highlightRange = useMemo(
-    () => findPdfHighlightRange(textItems, targetQuote ?? ""),
-    [textItems, targetQuote],
+  const resolvedMatches = useMemo(
+    () =>
+      reconstructedPage
+        ? resolvePdfMatches(reconstructedPage, {
+            quote: targetQuote,
+            query: targetQuery,
+            terms: targetTerms,
+          })
+        : [],
+    [reconstructedPage, targetQuery, targetQuote, targetTerms],
   );
-  const highlightTerms = useMemo(
-    () => termsForDirectHighlight(targetQuery ?? ""),
-    [targetQuery],
-  );
+  const activeMatch =
+    resolvedMatches[Math.min(activeMatchIndex, resolvedMatches.length - 1)];
+
+  useEffect(() => {
+    if (!active || !highlightLayerRef.current) return;
+    const mark = highlightLayerRef.current.querySelector(".pdf-highlight-box.active");
+    mark?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [active, activeMatch?.id, resolvedMatches.length]);
 
   return (
     <figure
@@ -287,77 +363,66 @@ function PdfStudyPage({
         } as CSSProperties
       }
     >
-      <canvas ref={canvasRef} aria-label={`Page ${pageNumber}`} />
-      {rendered && textItems.length ? (
-        <div ref={textLayerRef} className="pdf-study-text-layer" aria-hidden>
-          {textItems.map((item, index) => (
-            <PdfTextRun
-              key={`${index}-${item.str}`}
-              item={item}
-              index={index}
-              scale={scale}
-              highlightRange={highlightRange}
-              highlightTerms={highlightTerms}
-            />
-          ))}
+      <div className="pdf-study-sheet" ref={highlightLayerRef}>
+        <canvas ref={canvasRef} aria-label={`Page ${pageNumber}`} />
+        {rendered && reconstructedPage ? (
+          <PdfHighlightLayer
+            page={pageNumber}
+            pageSize={pageSize}
+            matches={resolvedMatches}
+            activeMatchId={activeMatch?.id}
+            debug={debug}
+            runBoxes={reconstructedPage.runs.map((run) => run.bboxViewport)}
+          />
+        ) : null}
+        {rendered && reconstructedPage && !reconstructedPage.rawText ? (
+          <p className="pdf-study-unsearchable">No extractable page text.</p>
+        ) : null}
+      </div>
+      {active && resolvedMatches.length > 1 ? (
+        <div className="pdf-match-controls">
+          <button
+            type="button"
+            aria-label="Previous match"
+            onClick={() =>
+              setActiveMatchIndex((index) =>
+                index <= 0 ? resolvedMatches.length - 1 : index - 1,
+              )
+            }
+          >
+            <ChevronLeft size={14} />
+          </button>
+          <span>
+            {activeMatchIndex + 1} / {resolvedMatches.length}
+          </span>
+          <button
+            type="button"
+            aria-label="Next match"
+            onClick={() =>
+              setActiveMatchIndex((index) => (index + 1) % resolvedMatches.length)
+            }
+          >
+            <ChevronRight size={14} />
+          </button>
         </div>
+      ) : null}
+      {debug && reconstructedPage ? (
+        <pre className="pdf-highlight-debug">
+          {JSON.stringify(
+            {
+              page: reconstructedPage.page,
+              rawText: reconstructedPage.rawText.slice(0, 900),
+              matches: resolvedMatches.map((match) => match.range),
+            },
+            null,
+            2,
+          )}
+        </pre>
       ) : null}
       {!rendered ? <div className="pdf-study-placeholder" /> : null}
       <figcaption>p. {pageNumber}</figcaption>
     </figure>
   );
-}
-
-function PdfTextRun({
-  item,
-  index,
-  scale,
-  highlightRange,
-  highlightTerms,
-}: {
-  item: PdfTextItem;
-  index: number;
-  scale: number;
-  highlightRange: PdfHighlightRange | null;
-  highlightTerms: string[];
-}) {
-  const transform = item.transform;
-  const normalizedText = item.str.toLowerCase();
-  const highlighted = Boolean(
-    highlightTerms.some((term) => normalizedText.includes(term)) ||
-    (highlightRange &&
-      index >= highlightRange.start &&
-      index <= highlightRange.end),
-  );
-  return (
-    <span
-      data-pdf-match={highlighted ? "true" : undefined}
-      className={
-        highlighted ? "pdf-study-text-run match" : "pdf-study-text-run"
-      }
-      style={{
-        left: `${transform[4] * scale}px`,
-        top: `${transform[5] * scale}px`,
-        fontSize: `${Math.max(1, Math.hypot(transform[2], transform[3]) * scale)}px`,
-        transform: `scaleX(${item.width ? item.width / Math.max(item.str.length, 1) / Math.max(Math.hypot(transform[0], transform[1]), 1) : 1})`,
-      }}
-    >
-      {item.str}
-    </span>
-  );
-}
-
-interface PdfTextItem {
-  str: string;
-  transform: number[];
-  width: number;
-  height: number;
-  fontName: string;
-}
-
-interface PdfHighlightRange {
-  start: number;
-  end: number;
 }
 
 function clampPage(page: number, pageCount: number) {
@@ -384,60 +449,25 @@ function pdfPageElementId(pageNumber: number) {
   return `study-pdf-page-${pageNumber}`;
 }
 
-function findPdfHighlightRange(
-  items: PdfTextItem[],
-  quote: string,
-): PdfHighlightRange | null {
-  const queryTerms = tokenizeForHighlight(quote).filter(
-    (term) => term.length > 3,
+function pdfFingerprint(pdf: PDFDocumentProxy | null, fallback: string) {
+  return (
+    (pdf as unknown as { fingerprints?: string[] } | null)?.fingerprints?.[0] ??
+    fallback
   );
-  if (!items.length || !queryTerms.length) return null;
-
-  const itemTerms = items.map((item) => tokenizeForHighlight(item.str));
-  let best: { start: number; end: number; score: number } | null = null;
-
-  for (let start = 0; start < itemTerms.length; start += 1) {
-    const seen = new Set<string>();
-    for (
-      let end = start;
-      end < Math.min(itemTerms.length, start + 18);
-      end += 1
-    ) {
-      for (const term of itemTerms[end]) {
-        if (queryTerms.includes(term)) seen.add(term);
-      }
-      const score = seen.size;
-      if (score > (best?.score ?? 0)) best = { start, end, score };
-      if (score >= Math.min(queryTerms.length, 5)) break;
-    }
-  }
-
-  if (!best || best.score < Math.min(2, queryTerms.length)) return null;
-  return { start: best.start, end: best.end };
 }
 
-function termsForDirectHighlight(query: string) {
-  return tokenizeForHighlight(query)
-    .filter((term) => term.length > 2)
-    .flatMap((term) => [term, stemHighlightTerm(term)])
-    .filter(
-      (term, index, terms) => term.length > 2 && terms.indexOf(term) === index,
-    );
-}
-
-function stemHighlightTerm(term: string) {
-  if (term.length > 5 && term.endsWith("ies")) return `${term.slice(0, -3)}y`;
-  if (term.length > 5 && term.endsWith("ing")) return term.slice(0, -3);
-  if (term.length > 4 && term.endsWith("ed")) return term.slice(0, -2);
-  if (term.length > 4 && term.endsWith("es")) return term.slice(0, -2);
-  if (term.length > 3 && term.endsWith("s")) return term.slice(0, -1);
-  return term;
-}
-
-function tokenizeForHighlight(value: string) {
-  return value
-    .replace(/\.\.\./g, " ")
-    .toLowerCase()
-    .split(/[^a-z0-9]+/)
-    .filter(Boolean);
+function pdfPageCacheKey({
+  cacheScope,
+  page,
+  scale,
+  rotation,
+  fingerprint,
+}: {
+  cacheScope: string;
+  page: number;
+  scale: number;
+  rotation: number;
+  fingerprint: string;
+}) {
+  return `${cacheScope}:${fingerprint}:${page}:${scale}:${rotation}`;
 }

@@ -7,6 +7,7 @@ import {
   initialBookFiles,
   type BookMetadata,
 } from "./templates";
+import { refreshStudySourceIndex } from "@/lib/study/source-index";
 
 export const BOOKS_ROOT = "projects";
 
@@ -105,6 +106,7 @@ export async function createBook(
   for (const [filePath, content] of Object.entries(files)) {
     await storage.writeFile(bookFilePath(book.id, filePath), content);
   }
+  await refreshStudySourceIndex(storage, book.id, new Date(book.createdAt));
   return book;
 }
 

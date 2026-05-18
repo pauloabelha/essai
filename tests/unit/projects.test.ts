@@ -27,6 +27,14 @@ describe("project creation", () => {
     expect(await storage.readFile("projects/my-book/notes.md")).toContain(
       "Notes",
     );
+    const studyIndex = JSON.parse(
+      await storage.readFile("projects/my-book/sources/.study-index.json"),
+    ) as { version: number; documents: unknown[]; chunks: unknown[] };
+    expect(studyIndex).toMatchObject({
+      version: 3,
+      documents: expect.any(Array),
+      chunks: expect.any(Array),
+    });
     expect(await listBooks(storage)).toHaveLength(1);
   });
 

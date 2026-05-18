@@ -9,7 +9,7 @@ export default defineConfig({
   webServer: {
     command: `npm run dev -- --port ${port}`,
     url: baseURL,
-    reuseExistingServer: false,
+    reuseExistingServer: process.env.PLAYWRIGHT_REUSE_SERVER === "true",
     env: {
       ESSAI_DATA_ROOT: "./.playwright-data",
     },
