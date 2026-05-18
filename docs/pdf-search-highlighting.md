@@ -26,6 +26,10 @@ MiniSearch server result
 → stable overlay rendering
 ```
 
+## Result Ordering
+
+The server still uses MiniSearch for broad retrieval, then deduplicates adjacent PDF chunks from the same uploaded page. Direct references are sorted by source path and numeric page before they are shown in Study mode, with stronger matches used only as a tie-breaker on the same page. This keeps PDF search results in reading order instead of bouncing around by score.
+
 ## Canonical Page Reconstruction
 
 For each visible or targeted native-text PDF page, the browser calls `getTextContent()` through PDF.js. Essai preserves text item order, reconstructs a raw page string, creates a normalized page string, and records every run’s raw and normalized character offsets.

@@ -194,6 +194,7 @@ export async function buildStudyInvestigation(
       (chunk) => chunk.score > 0 && chunk.chunk.path !== "sources/Claims.md",
     ),
   )
+    .sort(compareRankedPassagesByPage)
     .slice(0, exhaustive ? 8 : 5)
     .map((chunk) =>
       passageFromChunk(
@@ -289,6 +290,19 @@ function dedupeRankedPassages(chunks: RankedChunk[]) {
 
 function normalizedPassageKey(text: string) {
   return normalizeText(text).slice(0, 180);
+}
+
+function compareRankedPassagesByPage(a: RankedChunk, b: RankedChunk) {
+  return (
+    a.chunk.path.localeCompare(b.chunk.path) ||
+    pageSortValue(a.chunk.page) - pageSortValue(b.chunk.page) ||
+    b.score - a.score ||
+    a.index - b.index
+  );
+}
+
+function pageSortValue(page: string) {
+  return /^\d+$/.test(page) ? Number(page) : Number.MAX_SAFE_INTEGER;
 }
 
 function selectedSourceFromIndex(

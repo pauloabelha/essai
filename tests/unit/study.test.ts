@@ -181,6 +181,61 @@ Koetsier, T., 2001. On the prehistory of programmable machines: musical automata
     });
   });
 
+  it("sorts direct PDF search results by page number", async () => {
+    const storage = new InMemoryStorageProvider({
+      "projects/book/book.json": "{}",
+      "projects/book/sources/.study-index.json": JSON.stringify({
+        version: 3,
+        updatedAt: "2026-05-18T00:00:00.000Z",
+        documents: [
+          {
+            id: "pdf",
+            path: "sources/files/book/sample.pdf",
+            title: "sample.pdf",
+            kind: "upload",
+            sourceType: "book",
+            mimeType: "application/pdf",
+            sizeBytes: 1,
+            searchText: "machine machine machine",
+            metadata: { kind: "upload", extraction: "pdf-text" },
+          },
+        ],
+        chunks: [
+          {
+            id: "pdf:chunk:20",
+            documentId: "pdf",
+            chunkIndex: 20,
+            path: "sources/files/book/sample.pdf",
+            sourceType: "book",
+            page: "20",
+            text: "machine machine machine later page",
+            metadata: { kind: "upload", title: "sample.pdf" },
+          },
+          {
+            id: "pdf:chunk:3",
+            documentId: "pdf",
+            chunkIndex: 3,
+            path: "sources/files/book/sample.pdf",
+            sourceType: "book",
+            page: "3",
+            text: "machine early page",
+            metadata: { kind: "upload", title: "sample.pdf" },
+          },
+        ],
+      }),
+      "projects/book/sources/files/book/sample.pdf": "%PDF",
+    });
+
+    const study = await buildStudyInvestigation(storage, "book", {
+      query: "machine",
+    });
+
+    expect(study.directReferences.map((passage) => passage.page)).toEqual([
+      "3",
+      "20",
+    ]);
+  });
+
   it("limits retrieval to a selected uploaded source file", async () => {
     const storage = new InMemoryStorageProvider();
     await createBook(storage, "Book");

@@ -43,7 +43,7 @@ The Study room is built around:
 - **Source graph**: a restrained relationship map between concepts, source files, claims, and object notes.
 - **Coverage log**: an audit trail of what was read from the archive.
 
-The first implementation uses local source indexes and layered retrieval. Literal matches are ranked first, lexical matches can catch nearby forms and small typos, and semantic-neighbor matches can surface adjacent archival language such as `automata`, `mechanical`, or `instructions` for a query like `programmable machines`. Each passage keeps its source file, page or location, confidence, and retrieval method visible so search remains inspectable rather than conversational.
+The first implementation uses local source indexes and layered retrieval. Literal matches are ranked first, and lexical matches can catch nearby forms and small typos. Each passage keeps its source file, page or location, confidence, and retrieval method visible so search remains inspectable rather than conversational. Direct references are sorted by source and page number, so PDF results read in document order after retrieval and deduplication.
 
 PDF sources render inside Study mode with a local PDF.js reader rather than the browser’s embedded PDF plugin. Selecting a search result sends the reader to the cited page without reloading the document and highlights the matching text run on the page when the PDF exposes extractable text. The reader keeps page and zoom controls close to the source, so result navigation feels like moving through an archive rather than opening separate files.
 
@@ -260,6 +260,7 @@ The test suite covers:
 - text source indexing
 - source file storage, sanitization, and Markdown indexing
 - PDF text extraction into page-aware Study chunks
+- page-ordered Study search results
 - Study source index refresh after source capture and upload
 - binary storage list/read/rename/delete behavior
 - write/preview/study mode switching
