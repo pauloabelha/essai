@@ -20,6 +20,7 @@ import {
   User,
 } from "lucide-react";
 import type { ResearchCard as ResearchCardModel } from "@/lib/codex/cards";
+import { formatProvenanceMarkdownBlock } from "@/lib/codex/provenance";
 import {
   buildCodexMagicPrompt,
   type CodexMagicAction,
@@ -509,14 +510,19 @@ export function CodexWorkspace({
     if (!seed) return;
     selectSource(seed.sourcePath, true);
     setWorkspace((value) => {
+      const provenanceBlock = formatProvenanceMarkdownBlock({
+        sourcePath: seed.sourcePath,
+        page: seed.page,
+        retrievalMethod: seed.retrievalMethod ?? "Study selection",
+        originatingQuery: seed.originatingQuery,
+        quote: seed.quote,
+      });
       const entry = [
         value.trimEnd(),
         "",
         `## Source excerpt`,
         "",
-        `Source: ${seed.sourcePath}${seed.page ? ` p. ${seed.page}` : ""}`,
-        `Retrieval: ${seed.retrievalMethod ?? "Study selection"}`,
-        seed.originatingQuery ? `Query: ${seed.originatingQuery}` : "",
+        provenanceBlock,
         "",
         `> ${seed.quote}`,
         "",

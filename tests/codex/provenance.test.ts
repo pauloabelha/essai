@@ -1,7 +1,10 @@
 // @vitest-environment node
 
 import { describe, expect, it } from "vitest";
-import { normalizeProvenance } from "@/lib/codex/provenance";
+import {
+  formatProvenanceMarkdownBlock,
+  normalizeProvenance,
+} from "@/lib/codex/provenance";
 
 describe("codex provenance", () => {
   it("preserves required source metadata", () => {
@@ -27,11 +30,36 @@ describe("codex provenance", () => {
   });
 
   it("rejects ungrounded provenance", () => {
-    expect(() =>
-      normalizeProvenance({ retrievalMethod: "Manual" }),
-    ).toThrow(/source path/);
-    expect(() =>
-      normalizeProvenance({ sourcePath: "sources/raw.md" }),
-    ).toThrow(/retrieval method/);
+    expect(() => normalizeProvenance({ retrievalMethod: "Manual" })).toThrow(
+      /source path/,
+    );
+    expect(() => normalizeProvenance({ sourcePath: "sources/raw.md" })).toThrow(
+      /retrieval method/,
+    );
+  });
+
+  it("formats Study handoff provenance as a readable Markdown block", () => {
+    expect(
+      formatProvenanceMarkdownBlock(
+        {
+          sourcePath: "sources/files/raw/Hill1993.pdf",
+          page: "42",
+          retrievalMethod: "Exact Match",
+          originatingQuery: "automatic sequence",
+          quote: "automatic sequence",
+        },
+        new Date("2026-05-19T01:30:00Z"),
+      ),
+    ).toBe(
+      [
+        "```essai-provenance",
+        "source: sources/files/raw/Hill1993.pdf",
+        "page: 42",
+        "retrieval: Exact Match",
+        "query: automatic sequence",
+        "captured: 2026-05-19T01:30:00.000Z",
+        "```",
+      ].join("\n"),
+    );
   });
 });
