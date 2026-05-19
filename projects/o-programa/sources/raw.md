@@ -41,3 +41,13 @@ File: [Robinson, C (ed) - The New Cambridge History of Islam – Vol 1.pdf](file
 Uploaded source file.
 
 ---
+
+## 2026-05-18 20:50
+
+Type: raw
+
+File: [The Book of Knowledge of Ingenious Mechani - Ibn al-Razzaz al-Jazari.pdf](files/raw/20260518-205036-The-Book-of-Knowledge-of-Ingenious-Mechani---Ibn-al-Razzaz-al-Jazari-335fe08bf2c0.pdf)
+
+Uploaded source file.
+
+---

@@ -77,8 +77,8 @@ export function PdfStudyReader({
   }, [url]);
 
   const pageNumbers = useMemo(
-    () => visiblePdfPages(pageCount, requestedPage ?? currentPage),
-    [currentPage, pageCount, requestedPage],
+    () => visiblePdfPages(pageCount, currentPage),
+    [currentPage, pageCount],
   );
 
   const goToPage = (page: number, behavior: ScrollBehavior = "smooth") => {
@@ -100,6 +100,7 @@ export function PdfStudyReader({
       document
         .getElementById(pdfPageElementId(scrollRequest.page))
         ?.scrollIntoView({ block: "start", behavior: scrollRequest.behavior });
+      setScrollRequest(null);
     });
     return () => window.cancelAnimationFrame(frame);
   }, [pageNumbers, scrollRequest]);
@@ -183,6 +184,7 @@ export function PdfStudyReader({
                 targetQuote={pageNumber === requestedPage ? targetQuote : ""}
                 targetQuery={pageNumber === requestedPage ? targetQuery : ""}
                 targetTerms={pageNumber === requestedPage ? targetTerms : []}
+                targetKey={pageNumber === requestedPage ? targetKey : ""}
                 cache={pageCache}
                 fingerprint={fingerprint}
                 cacheScope={url}
@@ -204,6 +206,7 @@ function PdfStudyPage({
   targetQuote,
   targetQuery,
   targetTerms,
+  targetKey,
   cache,
   fingerprint,
   cacheScope,
@@ -216,6 +219,7 @@ function PdfStudyPage({
   targetQuote?: string;
   targetQuery?: string;
   targetTerms?: string[];
+  targetKey?: string;
   cache: Map<string, ReconstructedPdfPage>;
   fingerprint: string;
   cacheScope: string;
@@ -224,6 +228,7 @@ function PdfStudyPage({
   const wrapperRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const highlightLayerRef = useRef<HTMLDivElement | null>(null);
+  const lastMatchScrollKey = useRef("");
   const [visible, setVisible] = useState(false);
   const [rendered, setRendered] = useState(false);
   const [reconstructedPage, setReconstructedPage] =
@@ -347,9 +352,11 @@ function PdfStudyPage({
 
   useEffect(() => {
     if (!active || !highlightLayerRef.current) return;
+    if (!targetKey || lastMatchScrollKey.current === targetKey) return;
+    lastMatchScrollKey.current = targetKey;
     const mark = highlightLayerRef.current.querySelector(".pdf-highlight-box.active");
-    mark?.scrollIntoView({ block: "center", behavior: "smooth" });
-  }, [active, activeMatch?.id, resolvedMatches.length]);
+    mark?.scrollIntoView({ block: "nearest", behavior: "auto" });
+  }, [active, activeMatch?.id, resolvedMatches.length, targetKey]);
 
   return (
     <figure

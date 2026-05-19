@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "createdAt": "2026-05-19T02:33:59.312Z",
+  "updatedAt": "2026-05-19T02:33:59.821Z",
+  "messages": [
+    {
+      "id": "opening",
+      "role": "codex",
+      "content": "Codex is ready. Select a source, write Markdown notes, and ask for relationships, backlinks, claims, concepts, or source links.",
+      "status": "done"
+    }
+  ]
+}

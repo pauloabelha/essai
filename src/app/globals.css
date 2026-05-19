@@ -77,6 +77,10 @@ button {
   grid-template-columns: 268px minmax(0, 1fr) 258px;
 }
 
+.app-frame.codex-active {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .left-pane,
 .right-pane {
   min-height: 0;
@@ -1403,7 +1407,7 @@ summary {
   display: grid;
 }
 
-.passage-ledger button,
+.passage-ledger article,
 .object-ledger button {
   display: grid;
   justify-content: stretch;
@@ -1416,7 +1420,7 @@ summary {
   text-align: left;
 }
 
-.passage-ledger button:hover,
+.passage-ledger article:hover,
 .object-ledger button:hover {
   background: color-mix(in srgb, var(--accent) 4%, transparent);
 }
@@ -1450,6 +1454,313 @@ summary {
   color: color-mix(in srgb, var(--ink) 78%, var(--muted));
   font-size: 12px;
   line-height: 1.35;
+}
+
+.passage-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.passage-actions button {
+  width: auto;
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--rule));
+  border-radius: 6px;
+  padding: 6px 9px;
+  color: color-mix(in srgb, var(--accent) 82%, var(--ink));
+  font-size: 12px;
+}
+
+.codex-workspace {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 310px minmax(0, 1fr) 360px;
+  background: var(--surface);
+}
+
+.codex-source-panel,
+.codex-chat-panel {
+  min-height: 0;
+  border-color: var(--rule);
+  background: color-mix(in srgb, var(--surface) 86%, var(--paper));
+}
+
+.codex-source-panel {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(220px, 0.72fr);
+  border-right: 1px solid var(--rule);
+  padding: 0;
+}
+
+.codex-chat-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  border-left: 1px solid var(--rule);
+}
+
+.codex-source-panel h2,
+.codex-chat-panel h2 {
+  margin: 0 0 8px;
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 25px;
+  line-height: 1.08;
+  font-weight: 560;
+}
+
+.codex-source-panel header p:not(.eyebrow),
+.codex-chat-panel header p:not(.eyebrow),
+.codex-notes-panel header p {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.codex-source-panel-top,
+.codex-instructions-panel {
+  min-height: 0;
+  overflow: auto;
+  padding: 18px 16px;
+}
+
+.codex-instructions-panel {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 10px;
+  border-top: 1px solid var(--rule);
+  background: color-mix(in srgb, var(--surface) 82%, var(--paper));
+}
+
+.codex-instructions-panel textarea {
+  width: 100%;
+  min-height: 0;
+  resize: none;
+  border: 1px solid var(--rule);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 10px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+  outline: none;
+}
+
+.codex-instructions-panel textarea:focus {
+  border-color: color-mix(in srgb, var(--accent) 44%, var(--rule));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.codex-source-list {
+  display: grid;
+  gap: 5px;
+  border-top: 1px solid var(--rule);
+  padding-top: 14px;
+  margin-top: 14px;
+}
+
+.codex-source-list button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  justify-content: stretch;
+  align-items: center;
+  border-color: transparent;
+  background: transparent;
+  text-align: left;
+}
+
+.codex-source-list button.selected {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--rule));
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+  color: var(--accent);
+}
+
+.codex-source-list span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.codex-source-list em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+  text-transform: uppercase;
+}
+
+.codex-notes-panel {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--surface);
+}
+
+.codex-notes-panel > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid var(--rule);
+  padding: 16px 18px;
+  background: color-mix(in srgb, var(--surface) 94%, var(--paper));
+}
+
+.codex-notes-panel h1 {
+  margin: 0;
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 28px;
+  line-height: 1.1;
+  font-weight: 560;
+}
+
+.codex-notes-panel > header > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: end;
+  gap: 8px;
+}
+
+.codex-notes-panel > textarea {
+  width: 100%;
+  min-height: 0;
+  resize: vertical;
+  border: 0;
+  background: color-mix(in srgb, var(--surface) 98%, var(--paper));
+  color: var(--ink);
+  font-family: var(--font-serif), Georgia, serif;
+  font-size: 19px;
+  line-height: 1.68;
+  padding: 28px clamp(22px, 5vw, 70px);
+  outline: none;
+}
+
+.codex-chat-panel header {
+  border-bottom: 1px solid var(--rule);
+  padding: 16px;
+}
+
+.codex-message-list {
+  min-height: 0;
+  overflow: auto;
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 14px;
+}
+
+.codex-message {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+}
+
+.codex-message > span {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border: 1px solid var(--rule);
+  border-radius: 50%;
+  color: var(--accent);
+}
+
+.codex-message-body {
+  position: relative;
+  min-width: 0;
+}
+
+.codex-message-body button {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  z-index: 1;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--rule) 78%, transparent);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--muted);
+  opacity: 0;
+}
+
+.codex-message:hover .codex-message-body button,
+.codex-message-body button:focus-visible {
+  opacity: 1;
+}
+
+.codex-message-body button:hover {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 32%, var(--rule));
+}
+
+.codex-message pre {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--surface) 92%, var(--paper));
+  padding: 10px 42px 10px 12px;
+  color: color-mix(in srgb, var(--ink) 86%, var(--muted));
+  font-family: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.codex-message.user pre {
+  border-color: color-mix(in srgb, var(--accent) 30%, var(--rule));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+  color: var(--ink);
+}
+
+.codex-message.thinking pre {
+  color: var(--muted);
+  font-style: italic;
+}
+
+.codex-message-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  border-top: 1px solid var(--rule);
+  padding: 10px;
+}
+
+.codex-message-form textarea {
+  min-height: 58px;
+  max-height: 180px;
+  resize: vertical;
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 9px 10px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.codex-message-form button {
+  width: 38px;
+  height: 38px;
+  align-self: end;
+  padding: 0;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.relationship-backlinks-heading {
+  border-top: 1px solid var(--rule);
+  padding-top: 14px;
+  margin-top: 14px;
 }
 
 .object-ledger strong,
@@ -1706,6 +2017,10 @@ summary {
     grid-template-columns: 230px minmax(0, 1fr);
   }
 
+  .codex-workspace {
+    grid-template-columns: 240px minmax(0, 1fr) 320px;
+  }
+
   .right-pane {
     display: none;
   }
@@ -1732,6 +2047,10 @@ summary {
   }
 
   .app-frame.study-active {
+    grid-template-columns: 1fr;
+  }
+
+  .app-frame.codex-active {
     grid-template-columns: 1fr;
   }
 
@@ -1801,7 +2120,8 @@ summary {
   }
 
   .workspace,
-  .study-surface {
+  .study-surface,
+  .codex-workspace {
     min-height: 0;
   }
 
@@ -1828,6 +2148,25 @@ summary {
 
   .study-scroll {
     padding: 24px 14px 92px;
+  }
+
+  .codex-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .codex-source-panel,
+  .codex-chat-panel {
+    display: none;
+  }
+
+  .codex-notes-panel > header {
+    align-items: start;
+    display: grid;
+  }
+
+  .codex-notes-panel > textarea {
+    padding: 20px 16px 96px;
+    font-size: 17px;
   }
 
   .source-reader-header {

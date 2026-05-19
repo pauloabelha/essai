@@ -84,6 +84,10 @@ test("create project, capture notes and sources, write, preview, and navigate wi
   await page.keyboard.press(
     process.platform === "darwin" ? "Meta+S" : "Control+S",
   );
+  const savedMain = (await (
+    await request.get(`/api/books/${book.id}/files/main.md`)
+  ).json()) as { content: string };
+  expect(savedMain.content).toContain("A sentence about [[music-cylinder]].");
 
   await page.getByRole("button", { name: "Preview" }).click();
   await expect(page.locator(".preview-shell")).toContainText(

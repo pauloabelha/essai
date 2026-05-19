@@ -68,6 +68,8 @@ The manuscript is written only by the human author. AI may organize notes and su
 - objects/ gathers historical, technical, or material examples.
 - sources/ grounds claims in books, papers, quotations, and evidence.
 - sources/files/raw/ stores uploaded source files captured through the interface.
+- codex/cards/ stores source-grounded relationship cards.
+- codex/history/ stores saved Codex panel conversations.
 - drafts/ holds exploratory prose outside the canonical manuscript.
 - fragments/ keeps compressed sentences and loose formulations.
 
@@ -150,6 +152,16 @@ Uploaded source files captured through the interface are stored in:
 - raw/
 
 The Markdown files in sources/ remain the readable index.
+`,
+    "codex/README.md": `# Codex
+
+Codex cards, trails, sessions, and links live here as file-native scholarly apparatus.
+
+- cards/ stores committed research cards.
+- history/ stores saved Codex panel conversations.
+- trails/ can hold intellectual lineages.
+- sessions/ can hold saved scratch states.
+- links/ can hold future relationship sidecars.
 `,
   };
 }

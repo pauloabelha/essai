@@ -23,6 +23,10 @@ import {
   Upload,
   X,
 } from "lucide-react";
+import {
+  CodexWorkspace,
+  type CodexSeed,
+} from "@/components/codex/CodexWorkspace";
 import { useTheme } from "@/components/providers/theme-provider";
 import { MarkdownView } from "@/components/reading/markdown-view";
 import { PdfStudyReader } from "@/components/reading/pdf-study-reader";
@@ -40,7 +44,7 @@ const MarkdownEditor = dynamic(
 );
 
 type SaveState = "saved" | "dirty" | "saving";
-type ViewMode = "write" | "preview" | "study";
+type ViewMode = "write" | "preview" | "study" | "codex";
 type MobilePanel = "navigation" | "capture" | null;
 
 interface LoadedFile {
@@ -159,6 +163,7 @@ export function EssaiApp({
   const [studyInvestigation, setStudyInvestigation] =
     useState<StudyInvestigation | null>(null);
   const [studyLoading, setStudyLoading] = useState(false);
+  const [codexSeed, setCodexSeed] = useState<CodexSeed | null>(null);
   const studyReadOrderLoadedRef = useRef(false);
   const noteInputRef = useRef<HTMLTextAreaElement | null>(null);
   const pdfInputRef = useRef<HTMLInputElement | null>(null);
@@ -203,15 +208,17 @@ export function EssaiApp({
     [bookId],
   );
 
-  const saveFile = useCallback(async () => {
+  const saveFile = useCallback(async (contentOverride?: string) => {
     if (!bookId || !openPath) return;
+    const content = contentOverride ?? draft;
     setSaveState("saving");
+    setDraft(content);
     await fetch(
       `/api/books/${bookId}/files/${encodeURIComponentPath(openPath)}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: draft }),
+        body: JSON.stringify({ content }),
       },
     );
     await loadFile(openPath);
@@ -300,6 +307,15 @@ export function EssaiApp({
   const studySourceFiles = useMemo(
     () => sortStudySources(archiveFiles, studySourceReadAt),
     [archiveFiles, studySourceReadAt],
+  );
+  const codexSourceFiles = useMemo(
+    () =>
+      archiveFiles.filter(
+        (path) =>
+          path !== "sources/.study-index.json" &&
+          path !== "sources/files/README.md",
+      ),
+    [archiveFiles],
   );
 
   useEffect(() => {
@@ -608,6 +624,18 @@ export function EssaiApp({
     }));
   }
 
+  function sendStudyPassageToCodex(passage: StudyPassage) {
+    setCodexSeed({
+      quote: passage.quote,
+      sourcePath: passage.sourceFile,
+      page: passage.page,
+      retrievalMethod: passage.retrievalMethod,
+      originatingQuery: passage.query ?? studyQuery,
+    });
+    setViewMode("codex");
+    setMobilePanel(null);
+  }
+
   function openWikiTarget(target: string) {
     const normalized = target.toLowerCase().replace(/\.md$/, "");
     const found = allFiles.find(
@@ -655,6 +683,7 @@ export function EssaiApp({
       className={[
         "app-frame",
         viewMode === "study" ? "study-active" : "",
+        viewMode === "codex" ? "codex-active" : "",
         focusMode ? "focus-active" : "",
       ]
         .filter(Boolean)
@@ -668,7 +697,7 @@ export function EssaiApp({
           onSelectSource={selectStudySource}
           onSelectPassage={selectStudyPassage}
         />
-      ) : !focusMode ? (
+      ) : viewMode === "codex" || focusMode ? null : (
         <aside className="left-pane" aria-label="Manuscript sections">
           <div className="brand-row">
             <div>
@@ -701,18 +730,24 @@ export function EssaiApp({
             onRename={renameManuscriptSection}
           />
         </aside>
-      ) : null}
+      )}
 
       <section className="center-pane">
         <header className="topbar">
           <div>
             <strong>{activeBook?.title}</strong>
-            <span>{viewMode === "study" ? "sources archive" : openPath}</span>
+            <span>
+              {viewMode === "study"
+                ? "sources archive"
+                : viewMode === "codex"
+                  ? "relationship apparatus"
+                  : openPath}
+            </span>
           </div>
           <div className="toolbar">
-            {viewMode !== "study" ? (
+            {viewMode !== "study" && viewMode !== "codex" ? (
               <>
-                <button title="Save" onClick={saveFile}>
+                <button title="Save" onClick={() => void saveFile()}>
                   <Save size={16} />
                 </button>
               </>
@@ -738,17 +773,41 @@ export function EssaiApp({
               >
                 Study
               </button>
+              <button
+                className={viewMode === "codex" ? "active" : ""}
+                onClick={() => setViewMode("codex")}
+              >
+                Codex
+              </button>
             </div>
             {!focusMode ? (
               <>
                 <button
                   className="mobile-panel-button"
-                  aria-label={viewMode === "study" ? "Sources" : "Sections"}
-                  title={viewMode === "study" ? "Sources" : "Sections"}
+                  aria-label={
+                    viewMode === "study"
+                      ? "Sources"
+                      : viewMode === "codex"
+                        ? "Scope"
+                        : "Sections"
+                  }
+                  title={
+                    viewMode === "study"
+                      ? "Sources"
+                      : viewMode === "codex"
+                        ? "Scope"
+                        : "Sections"
+                  }
                   onClick={() => setMobilePanel("navigation")}
                 >
                   <PanelLeft size={16} />
-                  <span>{viewMode === "study" ? "Sources" : "Sections"}</span>
+                  <span>
+                    {viewMode === "study"
+                      ? "Sources"
+                      : viewMode === "codex"
+                        ? "Scope"
+                        : "Sections"}
+                  </span>
                 </button>
                 <button
                   className="mobile-panel-button"
@@ -800,15 +859,35 @@ export function EssaiApp({
               loadFile(path);
             }}
             onOpenPassage={selectStudyPassage}
+            onSendToCodex={sendStudyPassageToCodex}
             onStudyConcept={setStudyQuery}
             onSourceSelectionNote={commitSourceSelectionNote}
+          />
+        ) : viewMode === "codex" ? (
+          <CodexWorkspace
+            bookId={bookId}
+            sources={codexSourceFiles}
+            chapters={manuscriptSections}
+            seed={codexSeed}
+            onOpenSource={(path) => {
+              setViewMode("study");
+              selectStudySource(path);
+            }}
+            onOpenChapter={(path) => {
+              setViewMode("preview");
+              loadFile(path);
+            }}
           />
         ) : (
           <div
             className={`workspace mode-${viewMode} ${splitPreview ? "with-split" : ""}`}
           >
             {viewMode === "write" || splitPreview ? (
-              <MarkdownEditor value={draft} onChange={onDraftChange} />
+              <MarkdownEditor
+                value={draft}
+                onChange={onDraftChange}
+                onSave={(value) => void saveFile(value)}
+              />
             ) : null}
             {viewMode === "preview" ? (
               <MarkdownView markdown={draft} onWikiClick={openWikiTarget} />
@@ -817,7 +896,7 @@ export function EssaiApp({
         )}
       </section>
 
-      {viewMode !== "study" && !focusMode ? (
+      {viewMode !== "study" && viewMode !== "codex" && !focusMode ? (
         <aside className="right-pane" aria-label="Input">
           <InputPane
             noteValue={noteInput}
@@ -855,7 +934,7 @@ export function EssaiApp({
         </aside>
       ) : null}
 
-      {viewMode !== "study" ? (
+      {viewMode !== "study" && viewMode !== "codex" ? (
         <button className="floating-notes" onClick={focusNotes}>
           <Plus size={18} /> Notes
         </button>
@@ -881,6 +960,8 @@ export function EssaiApp({
               ? "Capture"
               : viewMode === "study"
                 ? "Sources"
+                : viewMode === "codex"
+                  ? "Scope"
                 : "Sections"
           }
           onClose={() => setMobilePanel(null)}
@@ -908,6 +989,11 @@ export function EssaiApp({
               onSelectSource={selectStudySource}
               onSelectPassage={selectStudyPassage}
             />
+          ) : viewMode === "codex" ? (
+            <div className="codex-mobile-scope">
+              <p className="eyebrow">Codex</p>
+              <p>Open Codex on a wider viewport for the full scope rail.</p>
+            </div>
           ) : (
             <SectionTree
               sections={manuscriptSections}
@@ -933,6 +1019,7 @@ export function EssaiApp({
             if (command === "write") setViewMode("write");
             if (command === "preview") setViewMode("preview");
             if (command === "study") setViewMode("study");
+            if (command === "codex") setViewMode("codex");
             if (command === "focus") setFocusMode((value) => !value);
             if (command === "focus-notes") focusNotes();
             if (command === "open-notes") openCurrentNotes();
@@ -1316,6 +1403,7 @@ function StudySurface({
   onSearchSubmit,
   onOpenFile,
   onOpenPassage,
+  onSendToCodex,
   onStudyConcept,
   onSourceSelectionNote,
 }: {
@@ -1329,6 +1417,7 @@ function StudySurface({
   onSearchSubmit: () => void;
   onOpenFile: (path: string) => void;
   onOpenPassage: (passage: StudyPassage) => void;
+  onSendToCodex: (passage: StudyPassage) => void;
   onStudyConcept: (concept: string) => void;
   onSourceSelectionNote: (
     source: NonNullable<StudyInvestigation["selectedSource"]>,
@@ -1416,6 +1505,7 @@ function StudySurface({
             passages={investigation?.directReferences ?? []}
             empty="No high-confidence passages yet."
             onOpenPassage={onOpenPassage}
+            onSendToCodex={onSendToCodex}
           />
 
           <section className="study-section">
@@ -1434,6 +1524,7 @@ function StudySurface({
             passages={investigation?.claims ?? []}
             empty="No related claims have been indexed in sources/Claims.md."
             onOpenPassage={onOpenPassage}
+            onSendToCodex={onSendToCodex}
           />
 
           <section className="study-section">
@@ -1672,11 +1763,13 @@ function StudyPassageSection({
   passages,
   empty,
   onOpenPassage,
+  onSendToCodex,
 }: {
   title: string;
   passages: StudyPassage[];
   empty: string;
   onOpenPassage: (passage: StudyPassage) => void;
+  onSendToCodex: (passage: StudyPassage) => void;
 }) {
   return (
     <section className="study-section">
@@ -1684,7 +1777,7 @@ function StudyPassageSection({
       <div className="passage-ledger">
         {passages.length ? (
           passages.map((passage) => (
-            <button key={passage.id} onClick={() => onOpenPassage(passage)}>
+            <article key={passage.id}>
               <blockquote>{passage.quote}</blockquote>
               <dl>
                 <div>
@@ -1704,7 +1797,15 @@ function StudyPassageSection({
                   <dd>{passage.retrievalMethod}</dd>
                 </div>
               </dl>
-            </button>
+              <div className="passage-actions">
+                <button type="button" onClick={() => onOpenPassage(passage)}>
+                  Open Source
+                </button>
+                <button type="button" onClick={() => onSendToCodex(passage)}>
+                  Send to Codex
+                </button>
+              </div>
+            </article>
           ))
         ) : (
           <p className="muted">{empty}</p>
@@ -1765,6 +1866,7 @@ function CommandPalette({
     ["write", "Write mode"],
     ["preview", "Preview mode"],
     ["study", "Study mode"],
+    ["codex", "Codex mode"],
     ["save", "Save"],
     ["focus-notes", "Focus Notes"],
     ["open-notes", "Open Notes"],

@@ -18,11 +18,12 @@ Essai opens in **Write** mode: one central Markdown editor, no permanent preview
 
 The left pane in Write mode is a manuscript section tree, not a file browser. It shows section names only. Each section points to its own Markdown file through `book.json`, so section structure stays in project metadata while the manuscript remains plain files on disk.
 
-The three modes are:
+The four modes are:
 
 - **Write**: the default writing desk. Editor only.
 - **Preview**: rendered Markdown for checking structure, links, and reading flow. A split preview can be toggled when needed.
 - **Study**: a separate semantic archive room for investigating concepts, claims, sources, notes, and objects without editing the manuscript.
+- **Codex**: a source-grounded scholarly relationship workbench for turning excerpts, notes, concepts, claims, objects, and manuscript sections into durable research cards.
 
 Focus mode hides both sidebars when the page needs to become only the text.
 
@@ -50,6 +51,38 @@ PDF sources render inside Study mode with a local PDF.js reader rather than the 
 For long PDFs, Study renders a small page window around the active page instead of mounting the whole document at once. This keeps source reading responsive on phones while preserving page jumps, zoom controls, and match highlighting.
 
 Study mode never writes to `main.md`. Its summaries and pathways are only interpretive views over auxiliary project files. The right capture panel stays available in Study mode, so notes and new sources can be added while the source shelf remains visible.
+
+## Codex Mode
+
+Codex is Essai's scholarly apparatus layer. It is a project-aware research panel beside editable Markdown notes. Codex may read manuscript sections, sources, concepts, objects, notes, and Codex files so it can answer questions and examine what has been written. It may not edit manuscript section files.
+
+The first implementation adds:
+
+- a Codex mode tab
+- a left source shelf sorted by last accessed
+- a central editable `codex/notes.md` Markdown file
+- a right Codex message panel proxied to the local `codex` CLI
+- copy buttons for user and Codex messages
+- saved conversation history under `codex/history/`
+- indexed Study search through `/search`
+- project-wide read commands such as `/search-project`, `/read`, and `/examine-section`
+- note-writing commands such as `/append-note`, `/source-note`, and `/commit-notes`
+- relationship commands such as `/related`, `/backlinks`, and `/source-links`
+- Study passage handoff into Codex
+
+Codex notes live under:
+
+```txt
+codex/notes.md
+```
+
+Codex panel histories are saved as JSON under:
+
+```txt
+codex/history/
+```
+
+The Codex CLI proxy keeps a warm `codex app-server` bridge, runs each book in a read-only Codex thread, and uses the local CLI login, such as a ChatGPT-backed `codex login`. Codex writes only auxiliary Codex files unless the human author manually edits elsewhere. It never silently mutates `main.md` or section files, and it never inserts generated prose into the manuscript. See `docs/codex-mode.md` for the full design contract.
 
 ## Notes And Sources Capture
 
@@ -119,6 +152,7 @@ This generated Study index contains normalized `documents` and `chunks` used by 
 - React Server Components for initial book loading.
 - Route Handlers under `src/app/api` for book and file operations.
 - Study archive route under `src/app/api/books/[bookId]/study`.
+- Codex relationship route under `src/app/api/books/[bookId]/codex`.
 - CodeMirror 6 for Markdown editing.
 - PDF.js for in-app Study PDF rendering, page navigation, and match highlighting.
 - Markdown files as the primary data model.
@@ -126,6 +160,7 @@ This generated Study index contains normalized `documents` and `chunks` used by 
 - Binary storage methods for uploaded source files.
 - Wiki-link, backlink, broken-link, and search logic in `src/lib`.
 - Source-grounded Study retrieval logic in `src/lib/study`.
+- File-native Codex relationship logic in `src/lib/codex`.
 - Vitest unit tests and Playwright end-to-end tests.
 
 The storage contract is:
@@ -176,6 +211,13 @@ projects/
       Claims.md
       files/
         raw/
+    codex/
+      notes.md
+      cards/
+      history/
+      sessions/
+      trails/
+      links/
     drafts/
     fragments/
 ```

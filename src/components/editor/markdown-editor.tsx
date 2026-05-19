@@ -2,16 +2,18 @@
 
 import CodeMirror from "@uiw/react-codemirror";
 import { markdown } from "@codemirror/lang-markdown";
-import { EditorView } from "@codemirror/view";
+import { EditorView, keymap } from "@codemirror/view";
 import { useTheme } from "@/components/providers/theme-provider";
 import { useMemo } from "react";
 
 export function MarkdownEditor({
   value,
   onChange,
+  onSave,
 }: {
   value: string;
   onChange: (value: string) => void;
+  onSave?: (value: string) => void;
 }) {
   const { resolvedTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
@@ -80,6 +82,20 @@ export function MarkdownEditor({
       ),
     [isDark],
   );
+  const saveKeymap = useMemo(
+    () =>
+      keymap.of([
+        {
+          key: "Mod-s",
+          preventDefault: true,
+          run: (view) => {
+            onSave?.(view.state.doc.toString());
+            return true;
+          },
+        },
+      ]),
+    [onSave],
+  );
 
   return (
     <CodeMirror
@@ -91,7 +107,7 @@ export function MarkdownEditor({
         highlightActiveLine: false,
         highlightActiveLineGutter: false,
       }}
-      extensions={[markdown(), EditorView.lineWrapping, editorTheme]}
+      extensions={[markdown(), EditorView.lineWrapping, editorTheme, saveKeymap]}
       onChange={onChange}
       theme={isDark ? "dark" : "light"}
     />
