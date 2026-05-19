@@ -73,3 +73,32 @@ Potential Issues:
 
 ---
 
+## 2026-05-19 00:39
+
+Workflow:
+Screenshot pass across the running application.
+
+Actions:
+- started the local Next.js dev server at `http://localhost:3000`
+- opened `/projects/o-programa`
+- captured desktop Write mode
+- captured desktop Study mode
+- captured desktop Codex mode
+- captured mobile Write mode
+
+Observations:
+- The screenshot set is intentionally small and documentary: it establishes the visual state of the core rooms at the beginning of the quality-review branch.
+- The next screenshot pass should include PDF source reading, highlighted PDF search results, Codex history, and a Study-to-Codex passage handoff.
+- Screenshots should be named by workflow, not by implementation detail, so future readers can navigate them as evidence.
+
+Screenshots:
+- [screenshots/2026-05-19-write-mode-desktop.png](screenshots/2026-05-19-write-mode-desktop.png)
+- [screenshots/2026-05-19-study-mode-desktop.png](screenshots/2026-05-19-study-mode-desktop.png)
+- [screenshots/2026-05-19-codex-mode-desktop.png](screenshots/2026-05-19-codex-mode-desktop.png)
+- [screenshots/2026-05-19-write-mode-mobile.png](screenshots/2026-05-19-write-mode-mobile.png)
+
+Questions:
+- Should later screenshot passes include annotated Markdown captions beside each image?
+- Which workflows deserve committed screenshots versus transient Playwright artifacts?
+
+---

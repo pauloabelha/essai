@@ -26,7 +26,11 @@ The review is not a feature sprint. It is an ongoing usability, philosophical, a
 
 ## First-Pass Status
 
-The first pass created the archive structure, inspected the app shell, Codex workspace, Study route, Study archive logic, README, Codex documentation, and the Codex end-to-end test. It also captured screenshots through Playwright once the app was started locally.
+The first pass created the archive structure, inspected the app shell, Codex workspace, Study route, Study archive logic, README, Codex documentation, and the Codex end-to-end test. It also captured screenshots through Playwright once the app was started locally:
+
+- [screenshots/2026-05-19-write-mode-desktop.png](screenshots/2026-05-19-write-mode-desktop.png)
+- [screenshots/2026-05-19-study-mode-desktop.png](screenshots/2026-05-19-study-mode-desktop.png)
+- [screenshots/2026-05-19-codex-mode-desktop.png](screenshots/2026-05-19-codex-mode-desktop.png)
+- [screenshots/2026-05-19-write-mode-mobile.png](screenshots/2026-05-19-write-mode-mobile.png)
 
 This archive should be extended in later commits with deeper, longer real-use sessions: PDF-heavy reading, Codex workspace editing, relationship navigation, repeated project reopening, and large-source fatigue testing.
-
