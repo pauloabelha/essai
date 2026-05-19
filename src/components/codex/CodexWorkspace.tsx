@@ -15,6 +15,7 @@ import {
   Send,
   ShieldCheck,
   Sparkles,
+  Trash2,
   Wand2,
   X,
   User,
@@ -646,7 +647,8 @@ export function CodexWorkspace({
     setHistoryView("chat");
   }
 
-  async function createNewHistoryChat() {
+  async function createNewHistoryChat(options: { open?: boolean } = {}) {
+    const { open = true } = options;
     const path = createHistoryPath();
     const now = new Date().toISOString();
     const history: CodexHistoryFile = {
@@ -667,7 +669,36 @@ export function CodexWorkspace({
     setMessages(history.messages);
     setHistoryItems((current) => upsertHistorySummary(current, path, history));
     setHistoryLoaded(true);
-    setHistoryView("chat");
+    if (open) setHistoryView("chat");
+  }
+
+  async function deleteHistoryChat(path: string) {
+    const item = historyItems.find((entry) => entry.path === path);
+    const label = item ? historyTitle(item) : path;
+    if (!window.confirm(`Delete Codex chat "${label}"?`)) return;
+
+    const response = await fetch(
+      `/api/books/${bookId}/files/${encodeURIComponentPath(path)}`,
+      { method: "DELETE" },
+    );
+    if (!response.ok) return;
+
+    const remaining = historyItems.filter((entry) => entry.path !== path);
+    setHistoryItems(remaining);
+    if (path !== historyPath) return;
+
+    const next = remaining[0];
+    if (next) {
+      const history = await readHistory(next.path);
+      if (!history) return;
+      setHistoryPath(next.path);
+      window.localStorage.setItem(codexHistoryKey(bookId), next.path);
+      setMessages(history.messages.map(normalizeHistoryMessage));
+      setHistoryLoaded(true);
+      return;
+    }
+
+    await createNewHistoryChat({ open: false });
   }
 
   function selectSource(path: string, selected?: boolean) {
@@ -961,6 +992,7 @@ export function CodexWorkspace({
     let workspaceReplace = "";
     let workspacePathForWrite = workspaceContext.workspacePath;
     let workspaceCreates: WorkspaceCreate[] = [];
+    let heartbeatCount = 0;
 
     const consume = (chunk: string) => {
       buffer += chunk;
@@ -981,6 +1013,15 @@ export function CodexWorkspace({
             updateStreamingMessage(
               messageId,
               codexStatusText(data.status ?? "working"),
+            );
+          }
+        }
+        if (event.name === "heartbeat") {
+          heartbeatCount += 1;
+          if (!streamed) {
+            updateStreamingMessage(
+              messageId,
+              codexHeartbeatText(heartbeatCount),
             );
           }
         }
@@ -1029,9 +1070,13 @@ export function CodexWorkspace({
 
   function updateStreamingMessage(messageId: string, content: string) {
     setMessages((current) =>
-      current.map((message) =>
-        message.id === messageId ? { ...message, content } : message,
-      ),
+      current.some(
+        (message) => message.id === messageId && message.content !== content,
+      )
+        ? current.map((message) =>
+            message.id === messageId ? { ...message, content } : message,
+          )
+        : current,
     );
   }
 
@@ -1417,17 +1462,28 @@ export function CodexWorkspace({
           <div className="codex-history-list">
             {historyItems.length ? (
               historyItems.map((item) => (
-                <button
+                <div
                   key={item.path}
-                  type="button"
-                  className={item.path === historyPath ? "active" : ""}
-                  onClick={() => void openHistoryChat(item.path)}
+                  className={`codex-history-item ${item.path === historyPath ? "active" : ""}`}
                 >
-                  <span>{formatHistoryDate(item.updatedAt)}</span>
-                  <strong>{historyTitle(item)}</strong>
-                  <em>{item.messageCount} messages</em>
-                  <small>{item.preview}</small>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => void openHistoryChat(item.path)}
+                  >
+                    <span>{formatHistoryDate(item.updatedAt)}</span>
+                    <strong>{historyTitle(item)}</strong>
+                    <em>{item.messageCount} messages</em>
+                    <small>{item.preview}</small>
+                  </button>
+                  <button
+                    type="button"
+                    aria-label={`Delete Codex chat ${historyTitle(item)}`}
+                    title="Delete chat"
+                    onClick={() => void deleteHistoryChat(item.path)}
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               ))
             ) : (
               <p>No Codex history yet.</p>
@@ -1623,7 +1679,10 @@ function isTransientCodexStatus(content: string) {
     "Codex bridge connected.",
     "Codex turn queued on the warm CLI bridge.",
     "Codex started. Waiting for the first token.",
+    "Codex is reading the project context.",
     "Codex is thinking.",
+    "Codex is still working before its first visible text.",
+    "Codex is still working. Long accuracy checks can take a few minutes.",
   ].includes(content.trim());
 }
 
@@ -1642,9 +1701,14 @@ function codexHistoryKey(bookId: string) {
 function codexStatusText(status: string) {
   if (status === "connected") return "Codex bridge connected.";
   if (status === "queued") return "Codex turn queued on the warm CLI bridge.";
-  if (status === "started")
-    return "Codex started. Waiting for the first token.";
+  if (status === "started") return "Codex is reading the project context.";
   return `Codex ${status}.`;
+}
+
+function codexHeartbeatText(count: number) {
+  if (count < 5) return "Codex is reading the project context.";
+  if (count < 30) return "Codex is still working before its first visible text.";
+  return "Codex is still working. Long accuracy checks can take a few minutes.";
 }
 
 function encodeURIComponentPath(path: string) {

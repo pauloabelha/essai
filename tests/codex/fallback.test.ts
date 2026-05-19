@@ -32,6 +32,25 @@ describe("codex fallback responses", () => {
 
     expect(result).toBeNull();
   });
+
+  it("builds prose fallback without source-study evidence", () => {
+    const result = buildCodexFallbackResponse({
+      message: [
+        "Codex magic action: Check prose.",
+        "",
+        "Selected manuscript sections:",
+        "- flauta-programavel.md",
+      ].join("\n"),
+      study: null,
+      manuscriptContext: "## flauta-programavel.md\n\nA draft paragraph.",
+      error: "Codex app-server turn timed out.",
+    });
+
+    expect(result?.output).toContain("local prose fallback memo");
+    expect(result?.output).toContain("No source-evidence search was run");
+    expect(result?.workspaceAppend).toContain("Grammar and syntax");
+    expect(result?.workspaceAppend).toContain("A draft paragraph.");
+  });
 });
 
 function fixtureStudy(): StudyInvestigation {

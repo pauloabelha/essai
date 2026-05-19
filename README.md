@@ -63,16 +63,16 @@ The first implementation adds:
 - a Codex mode tab
 - a left rail of fixed Codex magic calls for source search, accuracy review, and prose review
 - a central editable scratchpad with tabs, starting from `codex/workspace.md` and adding extra notes under `codex/workspace-tabs/`
-- a right Codex message panel proxied to the local `codex` CLI
+- a right Codex message panel proxied to the local `codex` CLI, kept mostly for short status updates and direct answers
 - copy buttons for user and Codex messages
-- saved conversation history under `codex/history/`
+- saved conversation history under `codex/history/`, with per-chat deletion from the history list
 - indexed Study search through `/search`
 - project-wide read commands such as `/search-project`, `/read`, and `/examine-section`
 - workspace-writing commands such as `/append-note`, `/source-note`, and `/commit-workspace`
 - relationship commands such as `/related`, `/backlinks`, and `/source-links`
 - Study passage handoff into Codex
 
-Magic call prompts are hardcoded in `src/lib/codex/magic-prompts.ts`. Each magic call opens a small scope selector before sending the prompt: source search selects source files, while accuracy and prose checks select manuscript sections by their Write-mode section names.
+Magic call prompts are hardcoded in `src/lib/codex/magic-prompts.ts`. Each magic call opens a small scope selector before sending the prompt: source search selects source files, while accuracy and prose checks select manuscript sections by their Write-mode section names. Prose checks are concise editorial passes, not source searches: Codex reads the selected manuscript text, infers the language and register, and applies a high-end essay/book standard such as piauí-level Portuguese or New Yorker-level English.
 
 The shared Codex scratchpad starts at:
 
@@ -86,7 +86,7 @@ Additional scratchpad tabs live under:
 codex/workspace-tabs/
 ```
 
-Magic actions create a fresh scratchpad tab before running, so an accuracy or prose pass has a dedicated editable note. Codex sees the active tab and the list of available tabs each turn; it can append to the active tab, replace it, or ask the app to create a new tab for a distinct line of inquiry.
+Magic actions create a fresh scratchpad tab before running, so an accuracy or prose pass has a dedicated editable note. Codex sees the active tab and the list of available tabs each turn; it can append to the active tab, replace it, or ask the app to create a new tab for a distinct line of inquiry. The intended interaction is scratchpad-first: durable analysis goes into the editable note, while chat stays brief.
 
 Codex panel histories are saved as JSON under:
 

@@ -34,6 +34,8 @@ describe("codex magic prompts", () => {
 
     expect(prompt).toContain("Codex magic action: Check prose.");
     expect(prompt).toContain("Do not rewrite the manuscript.");
+    expect(prompt).toContain("piauí-level literary-journal Portuguese");
+    expect(prompt).toContain("New Yorker-level literary essay prose");
     expect(prompt).toContain("High-level prose diagnosis");
     expect(prompt).toContain("- main.md");
   });
