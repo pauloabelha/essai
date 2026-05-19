@@ -29,6 +29,8 @@ Focus mode hides both sidebars when the page needs to become only the text.
 
 On mobile, Essai keeps the same writing and study model but collapses the permanent rails into deliberate panels. **Sections** opens manuscript navigation, **Capture** opens the notes and sources pane, and the central surface remains the primary reading or writing area. The desktop layout stays intact on larger screens; the mobile layout is an adaptive shell around the same file-native workflows.
 
+On desktop, panes can be resized by dragging the slim dividers between rails and the central surface. Essai remembers section, source, capture, split-preview, and Codex panel widths locally so each workspace can settle into the shape the writer prefers.
+
 ## Study Mode
 
 Study mode treats the project’s `sources/` directory as the semantic archive layer of the book. It is not a chatbot, an AI sidebar, or a writing assistant. It is a calm research surface for reading sources, filtering the archive, and making new notes without leaving the study view.
@@ -59,7 +61,7 @@ Codex is Essai's scholarly apparatus layer. It is a project-aware research panel
 The first implementation adds:
 
 - a Codex mode tab
-- a left source shelf sorted by last accessed
+- a left rail of fixed Codex magic calls for source search, accuracy review, and prose review
 - a central editable `codex/notes.md` Markdown file
 - a right Codex message panel proxied to the local `codex` CLI
 - copy buttons for user and Codex messages
@@ -69,6 +71,8 @@ The first implementation adds:
 - note-writing commands such as `/append-note`, `/source-note`, and `/commit-notes`
 - relationship commands such as `/related`, `/backlinks`, and `/source-links`
 - Study passage handoff into Codex
+
+Magic call prompts are hardcoded in `src/lib/codex/magic-prompts.ts`. Each magic call opens a small scope selector before sending the prompt: source search selects source files, while accuracy and prose checks select manuscript section files.
 
 Codex notes live under:
 

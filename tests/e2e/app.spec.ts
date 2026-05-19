@@ -34,6 +34,20 @@ test("create project, capture notes and sources, write, preview, and navigate wi
   await expect(
     page.getByRole("navigation", { name: "Sections" }).getByText("main.md"),
   ).toHaveCount(0);
+  const sectionsPane = page.getByRole("complementary", {
+    name: "Manuscript sections",
+  });
+  const sectionsBefore = await sectionsPane.boundingBox();
+  const sectionsGrip = page.getByLabel("Resize sections pane");
+  const sectionsGripBox = await sectionsGrip.boundingBox();
+  expect(sectionsBefore).not.toBeNull();
+  expect(sectionsGripBox).not.toBeNull();
+  await page.mouse.move(sectionsGripBox!.x + 3, sectionsGripBox!.y + 20);
+  await page.mouse.down();
+  await page.mouse.move(sectionsGripBox!.x + 65, sectionsGripBox!.y + 20);
+  await page.mouse.up();
+  const sectionsAfter = await sectionsPane.boundingBox();
+  expect(sectionsAfter!.width).toBeGreaterThan(sectionsBefore!.width + 40);
 
   await page.getByLabel("Notes input").fill("A captured note for later.");
   await page.getByRole("button", { name: "Submit", exact: true }).click();
@@ -50,7 +64,9 @@ test("create project, capture notes and sources, write, preview, and navigate wi
   await page.getByRole("button", { name: "Upload File" }).click();
   await expect(page.getByText("File saved.")).toBeVisible();
   await page.getByRole("button", { name: "Study" }).click();
-  await page.getByRole("button", { name: /sample-notes/i }).click();
+  await page
+    .locator(".study-source-picker button", { hasText: /sample-notes/i })
+    .click({ force: true });
   await page.getByLabel("Search current source").fill("source notes");
   await page.keyboard.press("Enter");
   await expect(page.locator(".app-frame")).toHaveClass(/study-active/);
@@ -93,6 +109,8 @@ test("create project, capture notes and sources, write, preview, and navigate wi
   await expect(page.locator(".preview-shell")).toContainText(
     "A sentence about",
   );
+  await page.getByRole("button", { name: "Split preview" }).click();
+  await expect(page.getByLabel("Resize preview split")).toBeVisible();
   await page.getByRole("button", { name: "Write" }).click();
   await page.keyboard.press(
     process.platform === "darwin" ? "Meta+." : "Control+.",

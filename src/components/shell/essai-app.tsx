@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type {
   CSSProperties,
   Dispatch,
+  PointerEvent as ReactPointerEvent,
   ReactNode,
   RefObject,
   SetStateAction,
@@ -46,6 +47,7 @@ const MarkdownEditor = dynamic(
 type SaveState = "saved" | "dirty" | "saving";
 type ViewMode = "write" | "preview" | "study" | "codex";
 type MobilePanel = "navigation" | "capture" | null;
+type PaneSide = "left" | "right";
 
 interface LoadedFile {
   path: string;
@@ -142,6 +144,10 @@ export function EssaiApp({
   const [, setSaveState] = useState<SaveState>("saved");
   const [viewMode, setViewMode] = useState<ViewMode>("write");
   const [splitPreview, setSplitPreview] = useState(false);
+  const [leftPaneWidth, setLeftPaneWidth] = useState(238);
+  const [rightPaneWidth, setRightPaneWidth] = useState(258);
+  const [studyLeftPaneWidth, setStudyLeftPaneWidth] = useState(268);
+  const [splitEditorPercent, setSplitEditorPercent] = useState(50);
   const [focusMode, setFocusMode] = useState(false);
   const [commandOpen, setCommandOpen] = useState(false);
   const [mobilePanel, setMobilePanel] = useState<MobilePanel>(null);
@@ -175,6 +181,7 @@ export function EssaiApp({
   const manuscriptSections = activeBook?.sections?.length
     ? activeBook.sections
     : [{ id: "main", title: "Main", path: "main.md" }];
+  const appLeftWidth = viewMode === "study" ? studyLeftPaneWidth : leftPaneWidth;
 
   const loadBooks = useCallback(async () => {
     const response = await fetch("/api/books");
@@ -234,6 +241,64 @@ export function EssaiApp({
     if (!bookId) return;
     loadFiles().then(() => loadFile(openPath));
   }, [bookId, loadFiles, loadFile, openPath]);
+
+  useEffect(() => {
+    setLeftPaneWidth(readStoredNumber("essai:pane:left", 238));
+    setRightPaneWidth(readStoredNumber("essai:pane:right", 258));
+    setStudyLeftPaneWidth(readStoredNumber("essai:pane:study-left", 268));
+    setSplitEditorPercent(readStoredNumber("essai:pane:split-editor", 50));
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("essai:pane:left", String(leftPaneWidth));
+  }, [leftPaneWidth]);
+
+  useEffect(() => {
+    window.localStorage.setItem("essai:pane:right", String(rightPaneWidth));
+  }, [rightPaneWidth]);
+
+  useEffect(() => {
+    window.localStorage.setItem("essai:pane:study-left", String(studyLeftPaneWidth));
+  }, [studyLeftPaneWidth]);
+
+  useEffect(() => {
+    window.localStorage.setItem(
+      "essai:pane:split-editor",
+      String(splitEditorPercent),
+    );
+  }, [splitEditorPercent]);
+
+  const startAppPaneResize = useCallback(
+    (side: PaneSide, event: ReactPointerEvent<HTMLButtonElement>) => {
+      const startX = event.clientX;
+      const startLeft = appLeftWidth;
+      const startRight = rightPaneWidth;
+      startHorizontalDrag(event, (clientX) => {
+        if (side === "left") {
+          const next = clamp(startLeft + clientX - startX, 180, 460);
+          if (viewMode === "study") setStudyLeftPaneWidth(next);
+          else setLeftPaneWidth(next);
+          return;
+        }
+        setRightPaneWidth(clamp(startRight + startX - clientX, 210, 520));
+      });
+    },
+    [appLeftWidth, rightPaneWidth, viewMode],
+  );
+
+  const startSplitResize = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      const container = event.currentTarget.parentElement;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      startHorizontalDrag(event, (clientX) => {
+        setSplitEditorPercent(
+          clamp(((clientX - rect.left) / rect.width) * 100, 28, 72),
+        );
+      });
+    },
+    [],
+  );
 
   const wrapSelection = useCallback((before: string, after: string) => {
     const selected = window.getSelection()?.toString();
@@ -688,48 +753,69 @@ export function EssaiApp({
       ]
         .filter(Boolean)
         .join(" ")}
+      style={
+        {
+          "--app-left-width": `${leftPaneWidth}px`,
+          "--app-study-left-width": `${studyLeftPaneWidth}px`,
+          "--app-right-width": `${rightPaneWidth}px`,
+        } as CSSProperties
+      }
     >
       {viewMode === "study" && !focusMode ? (
-        <StudySidebar
-          sources={studySourceFiles}
-          selectedSources={studySelectedSources}
-          investigation={studyInvestigation}
-          onSelectSource={selectStudySource}
-          onSelectPassage={selectStudyPassage}
-        />
-      ) : viewMode === "codex" || focusMode ? null : (
-        <aside className="left-pane" aria-label="Manuscript sections">
-          <div className="brand-row">
-            <div>
-              <p className="eyebrow">essai</p>
-              <select
-                value={bookId}
-                onChange={(event) => {
-                  setBookId(event.target.value);
-                  setOpenPath("main.md");
-                  router.push(`/projects/${event.target.value}`);
-                }}
-              >
-                {books.map((book) => (
-                  <option key={book.id} value={book.id}>
-                    {book.archived ? "[archived] " : ""}
-                    {book.title}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <button title="New book" onClick={() => createNewBook()}>
-              <Plus size={16} />
-            </button>
-          </div>
-          <SectionTree
-            sections={manuscriptSections}
-            activePath={openPath}
-            onOpen={loadFile}
-            onMove={moveManuscriptSection}
-            onRename={renameManuscriptSection}
+        <>
+          <StudySidebar
+            sources={studySourceFiles}
+            selectedSources={studySelectedSources}
+            investigation={studyInvestigation}
+            onSelectSource={selectStudySource}
+            onSelectPassage={selectStudyPassage}
           />
-        </aside>
+          <PaneResizer
+            side="left"
+            label="Resize sources pane"
+            onPointerDown={(event) => startAppPaneResize("left", event)}
+          />
+        </>
+      ) : viewMode === "codex" || focusMode ? null : (
+        <>
+          <aside className="left-pane" aria-label="Manuscript sections">
+            <div className="brand-row">
+              <div>
+                <p className="eyebrow">essai</p>
+                <select
+                  value={bookId}
+                  onChange={(event) => {
+                    setBookId(event.target.value);
+                    setOpenPath("main.md");
+                    router.push(`/projects/${event.target.value}`);
+                  }}
+                >
+                  {books.map((book) => (
+                    <option key={book.id} value={book.id}>
+                      {book.archived ? "[archived] " : ""}
+                      {book.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button title="New book" onClick={() => createNewBook()}>
+                <Plus size={16} />
+              </button>
+            </div>
+            <SectionTree
+              sections={manuscriptSections}
+              activePath={openPath}
+              onOpen={loadFile}
+              onMove={moveManuscriptSection}
+              onRename={renameManuscriptSection}
+            />
+          </aside>
+          <PaneResizer
+            side="left"
+            label="Resize sections pane"
+            onPointerDown={(event) => startAppPaneResize("left", event)}
+          />
+        </>
       )}
 
       <section className="center-pane">
@@ -881,12 +967,24 @@ export function EssaiApp({
         ) : (
           <div
             className={`workspace mode-${viewMode} ${splitPreview ? "with-split" : ""}`}
+            style={
+              {
+                "--split-editor-width": `${splitEditorPercent}%`,
+              } as CSSProperties
+            }
           >
             {viewMode === "write" || splitPreview ? (
               <MarkdownEditor
                 value={draft}
                 onChange={onDraftChange}
                 onSave={(value) => void saveFile(value)}
+              />
+            ) : null}
+            {viewMode === "preview" && splitPreview ? (
+              <PaneResizer
+                side="center"
+                label="Resize preview split"
+                onPointerDown={startSplitResize}
               />
             ) : null}
             {viewMode === "preview" ? (
@@ -897,41 +995,55 @@ export function EssaiApp({
       </section>
 
       {viewMode !== "study" && viewMode !== "codex" && !focusMode ? (
-        <aside className="right-pane" aria-label="Input">
-          <InputPane
-            noteValue={noteInput}
-            onNoteChange={setNoteInput}
-            onNoteCommit={commitNote}
-            noteTextareaRef={noteInputRef}
-            sourceValue={sourceInput}
-            pdfFile={pdfFile}
-            pdfInputRef={pdfInputRef}
-            onSourceChange={setSourceInput}
-            onSourceCommit={commitSource}
-            onPdfChange={setPdfFile}
-            onPdfUpload={uploadSourceFile}
-            onPdfDrop={uploadSourceFile}
+        <>
+          <PaneResizer
+            side="right"
+            label="Resize capture pane"
+            onPointerDown={(event) => startAppPaneResize("right", event)}
           />
-        </aside>
+          <aside className="right-pane" aria-label="Input">
+            <InputPane
+              noteValue={noteInput}
+              onNoteChange={setNoteInput}
+              onNoteCommit={commitNote}
+              noteTextareaRef={noteInputRef}
+              sourceValue={sourceInput}
+              pdfFile={pdfFile}
+              pdfInputRef={pdfInputRef}
+              onSourceChange={setSourceInput}
+              onSourceCommit={commitSource}
+              onPdfChange={setPdfFile}
+              onPdfUpload={uploadSourceFile}
+              onPdfDrop={uploadSourceFile}
+            />
+          </aside>
+        </>
       ) : null}
 
       {viewMode === "study" && !focusMode ? (
-        <aside className="right-pane study-input-pane" aria-label="Input">
-          <InputPane
-            noteValue={noteInput}
-            onNoteChange={setNoteInput}
-            onNoteCommit={commitNote}
-            noteTextareaRef={noteInputRef}
-            sourceValue={sourceInput}
-            pdfFile={pdfFile}
-            pdfInputRef={pdfInputRef}
-            onSourceChange={setSourceInput}
-            onSourceCommit={commitSource}
-            onPdfChange={setPdfFile}
-            onPdfUpload={uploadSourceFile}
-            onPdfDrop={uploadSourceFile}
+        <>
+          <PaneResizer
+            side="right"
+            label="Resize capture pane"
+            onPointerDown={(event) => startAppPaneResize("right", event)}
           />
-        </aside>
+          <aside className="right-pane study-input-pane" aria-label="Input">
+            <InputPane
+              noteValue={noteInput}
+              onNoteChange={setNoteInput}
+              onNoteCommit={commitNote}
+              noteTextareaRef={noteInputRef}
+              sourceValue={sourceInput}
+              pdfFile={pdfFile}
+              pdfInputRef={pdfInputRef}
+              onSourceChange={setSourceInput}
+              onSourceCommit={commitSource}
+              onPdfChange={setPdfFile}
+              onPdfUpload={uploadSourceFile}
+              onPdfDrop={uploadSourceFile}
+            />
+          </aside>
+        </>
       ) : null}
 
       {viewMode !== "study" && viewMode !== "codex" ? (
@@ -1171,6 +1283,26 @@ function SectionTree({
         />
       ))}
     </nav>
+  );
+}
+
+function PaneResizer({
+  side,
+  label,
+  onPointerDown,
+}: {
+  side: "left" | "right" | "center";
+  label: string;
+  onPointerDown: (event: ReactPointerEvent<HTMLButtonElement>) => void;
+}) {
+  return (
+    <button
+      type="button"
+      className={`pane-resizer ${side}`}
+      aria-label={label}
+      title={label}
+      onPointerDown={onPointerDown}
+    />
   );
 }
 
@@ -1964,6 +2096,38 @@ function flattenNodes(nodes: FileNode[]): FileNode[] {
 
 function encodeURIComponentPath(path: string) {
   return path.split("/").map(encodeURIComponent).join("/");
+}
+
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function readStoredNumber(key: string, fallback: number) {
+  if (typeof window === "undefined") return fallback;
+  const value = Number(window.localStorage.getItem(key));
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function startHorizontalDrag(
+  event: ReactPointerEvent<HTMLElement>,
+  onMove: (clientX: number) => void,
+) {
+  event.preventDefault();
+  const pointerId = event.pointerId;
+  event.currentTarget.setPointerCapture?.(pointerId);
+  document.body.classList.add("pane-resizing");
+  const move = (moveEvent: PointerEvent) => {
+    onMove(moveEvent.clientX);
+  };
+  const stop = () => {
+    document.body.classList.remove("pane-resizing");
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", stop);
+    window.removeEventListener("pointercancel", stop);
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", stop);
+  window.addEventListener("pointercancel", stop);
 }
 
 function cleanProjectPath(path: string, bookId?: string) {

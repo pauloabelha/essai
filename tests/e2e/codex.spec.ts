@@ -28,7 +28,23 @@ test("codex reads project files and commits only center markdown notes", async (
   await expect(page.getByRole("heading", { name: "codex/notes.md" })).toBeVisible();
   await expect(page.getByText(/codex\/notes\.md (loaded|created)\./)).toBeVisible();
   await expect(page.getByText("Read access: project files. Write access: codex/notes.md only.")).toBeVisible();
-  await page.getByRole("button", { name: /raw.md/ }).click();
+  const codexPanel = page.getByRole("complementary", { name: "Codex messages" });
+  const codexPanelBefore = await codexPanel.boundingBox();
+  const codexGrip = page.getByLabel("Resize Codex panel");
+  const codexGripBox = await codexGrip.boundingBox();
+  expect(codexPanelBefore).not.toBeNull();
+  expect(codexGripBox).not.toBeNull();
+  await page.mouse.move(codexGripBox!.x + 3, codexGripBox!.y + 80);
+  await page.mouse.down();
+  await page.mouse.move(codexGripBox!.x - 80, codexGripBox!.y + 80);
+  await page.mouse.up();
+  const codexPanelAfter = await codexPanel.boundingBox();
+  expect(codexPanelAfter!.width).toBeGreaterThan(codexPanelBefore!.width + 50);
+  await expect(page.getByRole("heading", { name: "Magic Calls" })).toBeVisible();
+  await page.getByRole("button", { name: /Search in sources/ }).click();
+  await expect(page.getByPlaceholder("programmable flute")).toBeVisible();
+  await expect(page.getByText(/sources/).first()).toBeVisible();
+  await page.getByRole("button", { name: "Cancel" }).click();
 
   const notes = page.getByLabel("Codex Markdown notes");
   await notes.fill("# Codex Notes\n\nManual note from the center editor.\n");
@@ -57,6 +73,16 @@ test("codex reads project files and commits only center markdown notes", async (
   await page.getByLabel("Send Codex message").click();
   await expect(page.getByText("Committed the center Markdown notes to codex/notes.md.")).toBeVisible();
   await expect(page.getByText(/History saved to codex\/history\//)).toBeVisible();
+  await page.getByLabel("Open Codex history").click();
+  await expect(page.getByRole("heading", { name: "History" })).toBeVisible();
+  await expect(page.getByText("/source-note Automatic sequence control matters here.")).toBeVisible();
+  await page
+    .getByRole("button", {
+      name: /source-note Automatic sequence control matters here/,
+    })
+    .click();
+  await expect(page.getByRole("heading", { name: "Panel" })).toBeVisible();
+  await expect(page.getByText("Committed the center Markdown notes to codex/notes.md.")).toBeVisible();
 
   const files = (await (
     await request.get(`/api/books/${book.id}/files`)

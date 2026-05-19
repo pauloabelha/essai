@@ -6,6 +6,16 @@ The right Codex panel is proxied to the local `codex` CLI through a warm `codex 
 
 The panel is chat-shaped, but it is still governed by the Codex boundary: messages are operational records, not manuscript prose. User and Codex messages can be copied with the copy button on each message.
 
+The Codex source rail and message panel are resizable on desktop. Their widths are remembered in local browser storage, matching Essai's other stretchable panes.
+
+The top-left Codex rail is reserved for fixed "magic" calls rather than ordinary source browsing. V0 includes:
+
+- **Search in sources**: opens a scoped source-selection box and sends a hardcoded source-search prompt.
+- **Check accuracy**: opens a manuscript-section selection box and asks Codex to compare claims against the archive.
+- **Check prose**: opens the same section-selection pattern and asks Codex for prose-level diagnosis without rewriting manuscript text.
+
+These prompts live in `src/lib/codex/magic-prompts.ts` so the operations remain explicit, reviewable, and separate from ad hoc chat.
+
 ## Model
 
 Essai keeps three boundaries clear:
@@ -38,7 +48,7 @@ Codex panel conversations are saved as JSON under:
 codex/history/
 ```
 
-History files preserve the message sequence for later review without treating the conversation as manuscript text.
+History files preserve the message sequence for later review without treating the conversation as manuscript text. The arrow control in the Codex panel opens the saved history list; choosing an entry loads that particular chat back into the panel.
 
 ## Provenance
 

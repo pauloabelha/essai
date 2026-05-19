@@ -1,17 +1,30 @@
 "use client";
 
+import type {
+  CSSProperties,
+  PointerEvent as ReactPointerEvent,
+} from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  ArrowLeft,
   BookOpen,
   Bot,
   Check,
   Copy,
   FileText,
+  Search,
   Save,
   Send,
+  ShieldCheck,
+  Sparkles,
+  Wand2,
   User,
 } from "lucide-react";
 import type { ResearchCard as ResearchCardModel } from "@/lib/codex/cards";
+import {
+  buildCodexMagicPrompt,
+  type CodexMagicAction,
+} from "@/lib/codex/magic-prompts";
 import type { RelatedCodexResult } from "@/lib/codex/relationships";
 import type { ManuscriptSection } from "@/lib/projects/templates";
 import type { FileNode } from "@/lib/storage/types";
@@ -67,6 +80,14 @@ interface CodexHistoryFile {
   messages: CodexMessage[];
 }
 
+interface CodexHistorySummary {
+  path: string;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+  preview: string;
+}
+
 interface CodexCliResponse {
   output?: string;
   notesAppend?: string;
@@ -85,6 +106,31 @@ const NOTES_PATH = "codex/notes.md";
 const HISTORY_ROOT = "codex/history";
 const DEFAULT_CODEX_INSTRUCTIONS =
   "Read manuscript sections and sources freely, but never edit human-written section files. Keep notes source-grounded and append only to Codex notes when asked.";
+const MAGIC_ACTIONS: Array<{
+  id: CodexMagicAction;
+  title: string;
+  description: string;
+  icon: typeof Search;
+}> = [
+  {
+    id: "search-sources",
+    title: "Search in sources",
+    description: "Ask Codex to inspect selected source scope.",
+    icon: Search,
+  },
+  {
+    id: "check-accuracy",
+    title: "Check accuracy",
+    description: "Compare manuscript sections against archive evidence.",
+    icon: ShieldCheck,
+  },
+  {
+    id: "check-prose",
+    title: "Check prose",
+    description: "Read selected sections for clarity and structure.",
+    icon: Wand2,
+  },
+];
 
 export function CodexWorkspace({
   bookId,
@@ -108,6 +154,13 @@ export function CodexWorkspace({
   const [codexInstructions, setCodexInstructions] = useState(
     DEFAULT_CODEX_INSTRUCTIONS,
   );
+  const [activeMagicAction, setActiveMagicAction] =
+    useState<CodexMagicAction | null>(null);
+  const [magicQuery, setMagicQuery] = useState("");
+  const [magicSources, setMagicSources] = useState<string[]>([]);
+  const [magicSections, setMagicSections] = useState<string[]>([]);
+  const [scopePaneWidth, setScopePaneWidth] = useState(310);
+  const [chatPaneWidth, setChatPaneWidth] = useState(360);
   const [notes, setNotes] = useState("");
   const [notesStatus, setNotesStatus] = useState("Loading notes.");
   const [messages, setMessages] = useState<CodexMessage[]>([
@@ -124,10 +177,16 @@ export function CodexWorkspace({
   const [historyPath, setHistoryPath] = useState("");
   const [historyStatus, setHistoryStatus] = useState("History loading.");
   const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyView, setHistoryView] = useState<"chat" | "history">("chat");
+  const [historyItems, setHistoryItems] = useState<CodexHistorySummary[]>([]);
   const [response, setResponse] = useState<CodexResponse | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
   const messagesRef = useRef<CodexMessage[]>(messages);
   const chapterOptions = useMemo(() => flattenSections(chapters), [chapters]);
+  const sectionPaths = useMemo(
+    () => [...new Set(chapterOptions.map((section) => section.path))],
+    [chapterOptions],
+  );
   const sortedSources = useMemo(
     () =>
       [...sources].sort((a, b) => {
@@ -135,6 +194,38 @@ export function CodexWorkspace({
         return recent || sourceLabel(a).localeCompare(sourceLabel(b));
       }),
     [sources, sourceAccessedAt],
+  );
+
+  useEffect(() => {
+    setScopePaneWidth(readStoredNumber("essai:pane:codex-scope", 310));
+    setChatPaneWidth(readStoredNumber("essai:pane:codex-chat", 360));
+  }, []);
+
+  useEffect(() => {
+    window.localStorage.setItem("essai:pane:codex-scope", String(scopePaneWidth));
+  }, [scopePaneWidth]);
+
+  useEffect(() => {
+    window.localStorage.setItem("essai:pane:codex-chat", String(chatPaneWidth));
+  }, [chatPaneWidth]);
+
+  const startCodexPaneResize = useCallback(
+    (
+      side: "left" | "right",
+      event: ReactPointerEvent<HTMLButtonElement>,
+    ) => {
+      const startX = event.clientX;
+      const startScope = scopePaneWidth;
+      const startChat = chatPaneWidth;
+      startHorizontalDrag(event, (clientX) => {
+        if (side === "left") {
+          setScopePaneWidth(clamp(startScope + clientX - startX, 220, 520));
+          return;
+        }
+        setChatPaneWidth(clamp(startChat + startX - clientX, 260, 620));
+      });
+    },
+    [chatPaneWidth, scopePaneWidth],
   );
 
   const loadCodex = useCallback(
@@ -183,33 +274,61 @@ export function CodexWorkspace({
       .sort();
   }, [bookId]);
 
+  const readHistory = useCallback(
+    async (path: string) => {
+      const response = await fetch(
+        `/api/books/${bookId}/files/${encodeURIComponentPath(path)}`,
+      );
+      if (!response.ok) return null;
+      const file = (await response.json()) as { content: string };
+      return parseHistoryFile(file.content);
+    },
+    [bookId],
+  );
+
+  const loadHistorySummaries = useCallback(
+    async (paths: string[]) => {
+      const summaries = await Promise.all(
+        paths.map(async (path) => {
+          const history = await readHistory(path);
+          return history ? summarizeHistory(path, history) : null;
+        }),
+      );
+      return summaries
+        .filter((item): item is CodexHistorySummary => Boolean(item))
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+    },
+    [readHistory],
+  );
+
+  useEffect(() => {
+    setMagicSources(sources);
+  }, [sources]);
+
+  useEffect(() => {
+    setMagicSections(sectionPaths);
+  }, [sectionPaths]);
+
   const loadHistory = useCallback(async () => {
     setHistoryLoaded(false);
     const savedPath = window.localStorage.getItem(codexHistoryKey(bookId)) ?? "";
     const existing = await listHistoryFiles();
+    setHistoryItems(await loadHistorySummaries(existing));
     const path =
       (savedPath && existing.includes(savedPath) ? savedPath : existing.at(-1)) ??
       createHistoryPath();
     setHistoryPath(path);
     window.localStorage.setItem(codexHistoryKey(bookId), path);
 
-    const response = await fetch(
-      `/api/books/${bookId}/files/${encodeURIComponentPath(path)}`,
-    );
-    if (response.ok) {
-      const file = (await response.json()) as { content: string };
-      const history = parseHistoryFile(file.content);
-      if (history?.messages.length) {
-        setMessages(history.messages);
-        setHistoryStatus(`History loaded from ${path}.`);
-      } else {
-        setHistoryStatus(`History ready at ${path}.`);
-      }
+    const history = await readHistory(path);
+    if (history?.messages.length) {
+      setMessages(history.messages);
+      setHistoryStatus(`History loaded from ${path}.`);
     } else {
       setHistoryStatus(`History ready at ${path}.`);
     }
     setHistoryLoaded(true);
-  }, [bookId, listHistoryFiles]);
+  }, [bookId, listHistoryFiles, loadHistorySummaries, readHistory]);
 
   const saveHistory = useCallback(
     async (nextMessages: CodexMessage[]) => {
@@ -234,6 +353,7 @@ export function CodexWorkspace({
         },
       );
       setHistoryStatus(`History saved to ${historyPath}.`);
+      setHistoryItems((current) => upsertHistorySummary(current, historyPath, history));
     },
     [bookId, historyPath],
   );
@@ -332,6 +452,23 @@ export function CodexWorkspace({
     }, 1400);
   }
 
+  async function openHistoryList() {
+    const paths = await listHistoryFiles();
+    setHistoryItems(await loadHistorySummaries(paths));
+    setHistoryView("history");
+  }
+
+  async function openHistoryChat(path: string) {
+    const history = await readHistory(path);
+    if (!history) return;
+    setHistoryPath(path);
+    window.localStorage.setItem(codexHistoryKey(bookId), path);
+    setMessages(history.messages);
+    setHistoryLoaded(true);
+    setHistoryStatus(`History loaded from ${path}.`);
+    setHistoryView("chat");
+  }
+
   function selectSource(path: string, selected?: boolean) {
     setSelectedSources((current) => {
       const shouldSelect = selected ?? !current.includes(path);
@@ -341,14 +478,32 @@ export function CodexWorkspace({
     setSourceAccessedAt((current) => ({ ...current, [path]: Date.now() }));
   }
 
-  async function sendMessage() {
-    const content = input.trim();
+  function toggleMagicSource(path: string) {
+    setMagicSources((current) =>
+      current.includes(path)
+        ? current.filter((source) => source !== path)
+        : [...current, path],
+    );
+    setSourceAccessedAt((current) => ({ ...current, [path]: Date.now() }));
+  }
+
+  function toggleMagicSection(path: string) {
+    setMagicSections((current) =>
+      current.includes(path)
+        ? current.filter((section) => section !== path)
+        : [...current, path],
+    );
+  }
+
+  async function sendMessage(message?: { content: string; displayContent?: string }) {
+    const content = (message?.content ?? input).trim();
     if (!content) return;
-    setInput("");
+    const displayContent = (message?.displayContent ?? content).trim();
+    if (!message) setInput("");
     const userMessage: CodexMessage = {
       id: `user-${Date.now()}`,
       role: "user",
-      content,
+      content: displayContent,
     };
     const thinkingId = `codex-${Date.now()}`;
     setMessages((current) => [
@@ -387,6 +542,26 @@ export function CodexWorkspace({
         ),
       );
     }
+  }
+
+  async function runMagicAction() {
+    if (!activeMagicAction) return;
+    const isSourceSearch = activeMagicAction === "search-sources";
+    const sourcesForPrompt = isSourceSearch ? magicSources : sources;
+    const sectionsForPrompt = isSourceSearch ? [] : magicSections;
+    const prompt = buildCodexMagicPrompt(activeMagicAction, {
+      query: magicQuery,
+      sources: sourcesForPrompt,
+      sections: sectionsForPrompt,
+    });
+    setSelectedSources(sourcesForPrompt);
+    const action = MAGIC_ACTIONS.find((item) => item.id === activeMagicAction);
+    const label =
+      activeMagicAction === "search-sources"
+        ? `${action?.title ?? "Search in sources"}: ${magicQuery || "all sources"}`
+        : `${action?.title ?? "Codex magic"} (${sectionsForPrompt.length || "all"} section${sectionsForPrompt.length === 1 ? "" : "s"})`;
+    setActiveMagicAction(null);
+    await sendMessage({ content: prompt, displayContent: `Magic: ${label}` });
   }
 
   async function codexReply(message: string, messageId: string) {
@@ -635,28 +810,150 @@ export function CodexWorkspace({
   }
 
   return (
-    <div className="codex-workspace">
+    <div
+      className="codex-workspace"
+      style={
+        {
+          "--codex-scope-width": `${scopePaneWidth}px`,
+          "--codex-chat-width": `${chatPaneWidth}px`,
+        } as CSSProperties
+      }
+    >
       <aside className="codex-source-panel" aria-label="Codex sources">
         <section className="codex-source-panel-top">
           <header>
-            <p className="eyebrow">Sources</p>
-            <h2>Archive</h2>
-            <p>
-              {selectedSources.length || "No"} selected. Sorted by last access.
-            </p>
+            <p className="eyebrow">Codex</p>
+            <h2>Magic Calls</h2>
+            <p>Structured operations with fixed scholarly prompts.</p>
           </header>
-          <div className="codex-source-list">
-            {sortedSources.map((source) => (
+          <div className="codex-magic-list">
+            {MAGIC_ACTIONS.map((action) => {
+              const Icon = action.icon;
+              return (
+                <button
+                  key={action.id}
+                  type="button"
+                  className={activeMagicAction === action.id ? "active" : ""}
+                  onClick={() => setActiveMagicAction(action.id)}
+                >
+                  <Icon size={15} />
+                  <span>
+                    <strong>{action.title}</strong>
+                    <em>{action.description}</em>
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+          {activeMagicAction ? (
+            <div className="codex-magic-box">
+              <header>
+                <Sparkles size={15} />
+                <strong>
+                  {MAGIC_ACTIONS.find((action) => action.id === activeMagicAction)
+                    ?.title ?? "Codex magic"}
+                </strong>
+              </header>
+              {activeMagicAction === "search-sources" ? (
+                <label>
+                  Query
+                  <input
+                    value={magicQuery}
+                    onChange={(event) => setMagicQuery(event.target.value)}
+                    placeholder="programmable flute"
+                  />
+                </label>
+              ) : null}
+              <div className="codex-magic-select-row">
+                <span>
+                  {activeMagicAction === "search-sources"
+                    ? `${magicSources.length}/${sources.length} sources`
+                    : `${magicSections.length}/${sectionPaths.length} sections`}
+                </span>
+                <button
+                  type="button"
+                  onClick={() =>
+                    activeMagicAction === "search-sources"
+                      ? setMagicSources(sources)
+                      : setMagicSections(sectionPaths)
+                  }
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    activeMagicAction === "search-sources"
+                      ? setMagicSources([])
+                      : setMagicSections([])
+                  }
+                >
+                  None
+                </button>
+              </div>
+              <div className="codex-magic-options">
+                {(activeMagicAction === "search-sources"
+                  ? sortedSources
+                  : sectionPaths
+                ).map((path) => {
+                  const checked =
+                    activeMagicAction === "search-sources"
+                      ? magicSources.includes(path)
+                      : magicSections.includes(path);
+                  return (
+                    <label key={path}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() =>
+                          activeMagicAction === "search-sources"
+                            ? toggleMagicSource(path)
+                            : toggleMagicSection(path)
+                        }
+                      />
+                      <span>
+                        {activeMagicAction === "search-sources"
+                          ? sourceLabel(path)
+                          : path}
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="codex-magic-actions">
+                <button type="button" onClick={() => setActiveMagicAction(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void runMagicAction()}
+                  disabled={
+                    activeMagicAction === "search-sources"
+                      ? !magicSources.length
+                      : !magicSections.length
+                  }
+                >
+                  Run
+                </button>
+              </div>
+            </div>
+          ) : null}
+          <div className="codex-active-scope">
+            <p className="eyebrow">Active Scope</p>
+            <p>{selectedSources.length || "No"} sources selected for ad hoc commands.</p>
+          </div>
+          <div className="codex-source-list compact">
+            {selectedSources.map((source) => (
               <button
                 key={source}
                 type="button"
-                className={selectedSources.includes(source) ? "selected" : ""}
-                aria-pressed={selectedSources.includes(source)}
+                className="selected"
+                aria-pressed="true"
                 onClick={() => selectSource(source)}
               >
                 <FileText size={14} />
                 <span>{sourceLabel(source)}</span>
-                <em>{sourceAccessedAt[source] ? "recent" : "unread"}</em>
+                <em>active</em>
               </button>
             ))}
           </div>
@@ -673,6 +970,13 @@ export function CodexWorkspace({
           />
         </section>
       </aside>
+      <button
+        type="button"
+        className="pane-resizer left"
+        aria-label="Resize Codex source pane"
+        title="Resize Codex source pane"
+        onPointerDown={(event) => startCodexPaneResize("left", event)}
+      />
 
       <section className="codex-notes-panel">
         <header>
@@ -702,65 +1006,122 @@ export function CodexWorkspace({
           spellCheck
         />
       </section>
+      <button
+        type="button"
+        className="pane-resizer right"
+        aria-label="Resize Codex panel"
+        title="Resize Codex panel"
+        onPointerDown={(event) => startCodexPaneResize("right", event)}
+      />
 
       <aside className="codex-chat-panel" aria-label="Codex messages">
         <header>
-          <p className="eyebrow">Codex</p>
-          <h2>Panel</h2>
-          <p>{response?.cards.length ?? 0} committed cards indexed.</p>
-          <p>{selectedSources.length || "No"} active source selections.</p>
-          <p>{historyStatus}</p>
-          <p>Proxy: local Codex CLI. Read access: project files. Write access: {NOTES_PATH} only.</p>
-        </header>
-        <div className="codex-message-list">
-          {messages.map((message) => (
-            <article
-              key={message.id}
-              className={`codex-message ${message.role} ${message.status ?? ""}`}
+          <div className="codex-chat-title-row">
+            <button
+              type="button"
+              aria-label={
+                historyView === "history"
+                  ? "Back to Codex chat"
+                  : "Open Codex history"
+              }
+              title={historyView === "history" ? "Back to chat" : "History"}
+              onClick={() =>
+                historyView === "history"
+                  ? setHistoryView("chat")
+                  : void openHistoryList()
+              }
             >
-              <span>{message.role === "user" ? <User size={14} /> : <Bot size={14} />}</span>
-              <div className="codex-message-body">
+              <ArrowLeft size={15} />
+            </button>
+            <div>
+              <p className="eyebrow">Codex</p>
+              <h2>{historyView === "history" ? "History" : "Panel"}</h2>
+            </div>
+          </div>
+          {historyView === "chat" ? (
+            <>
+              <p>{response?.cards.length ?? 0} committed cards indexed.</p>
+              <p>{selectedSources.length || "No"} active source selections.</p>
+              <p>{historyStatus}</p>
+              <p>Proxy: local Codex CLI. Read access: project files. Write access: {NOTES_PATH} only.</p>
+            </>
+          ) : (
+            <p>Saved conversations from {HISTORY_ROOT}.</p>
+          )}
+        </header>
+        {historyView === "history" ? (
+          <div className="codex-history-list">
+            {historyItems.length ? (
+              historyItems.map((item) => (
                 <button
+                  key={item.path}
                   type="button"
-                  aria-label={`Copy ${message.role} message`}
-                  title="Copy message"
-                  onClick={() => void copyMessage(message)}
+                  className={item.path === historyPath ? "active" : ""}
+                  onClick={() => void openHistoryChat(item.path)}
                 >
-                  {copiedMessageId === message.id ? (
-                    <Check size={13} />
-                  ) : (
-                    <Copy size={13} />
-                  )}
+                  <span>{formatHistoryDate(item.updatedAt)}</span>
+                  <strong>{historyTitle(item)}</strong>
+                  <em>{item.messageCount} messages</em>
+                  <small>{item.preview}</small>
                 </button>
-                <pre>{message.content}</pre>
-              </div>
-            </article>
-          ))}
-          <div ref={messageEndRef} />
-        </div>
-        <form
-          className="codex-message-form"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void sendMessage();
-          }}
-        >
-          <textarea
-            aria-label="Codex message"
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-            placeholder="/related programmable behavior"
-            onKeyDown={(event) => {
-              if (event.key === "Enter" && !event.shiftKey) {
+              ))
+            ) : (
+              <p>No Codex history yet.</p>
+            )}
+          </div>
+        ) : (
+          <>
+            <div className="codex-message-list">
+              {messages.map((message) => (
+                <article
+                  key={message.id}
+                  className={`codex-message ${message.role} ${message.status ?? ""}`}
+                >
+                  <span>{message.role === "user" ? <User size={14} /> : <Bot size={14} />}</span>
+                  <div className="codex-message-body">
+                    <button
+                      type="button"
+                      aria-label={`Copy ${message.role} message`}
+                      title="Copy message"
+                      onClick={() => void copyMessage(message)}
+                    >
+                      {copiedMessageId === message.id ? (
+                        <Check size={13} />
+                      ) : (
+                        <Copy size={13} />
+                      )}
+                    </button>
+                    <pre>{message.content}</pre>
+                  </div>
+                </article>
+              ))}
+              <div ref={messageEndRef} />
+            </div>
+            <form
+              className="codex-message-form"
+              onSubmit={(event) => {
                 event.preventDefault();
                 void sendMessage();
-              }
-            }}
-          />
-          <button type="submit" aria-label="Send Codex message">
-            <Send size={16} />
-          </button>
-        </form>
+              }}
+            >
+              <textarea
+                aria-label="Codex message"
+                value={input}
+                onChange={(event) => setInput(event.target.value)}
+                placeholder="/related programmable behavior"
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    void sendMessage();
+                  }
+                }}
+              />
+              <button type="submit" aria-label="Send Codex message">
+                <Send size={16} />
+              </button>
+            </form>
+          </>
+        )}
       </aside>
     </div>
   );
@@ -840,6 +1201,38 @@ function encodeURIComponentPath(path: string) {
   return path.split("/").map(encodeURIComponent).join("/");
 }
 
+function clamp(value: number, min: number, max: number) {
+  return Math.min(max, Math.max(min, value));
+}
+
+function readStoredNumber(key: string, fallback: number) {
+  if (typeof window === "undefined") return fallback;
+  const value = Number(window.localStorage.getItem(key));
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function startHorizontalDrag(
+  event: ReactPointerEvent<HTMLElement>,
+  onMove: (clientX: number) => void,
+) {
+  event.preventDefault();
+  const pointerId = event.pointerId;
+  event.currentTarget.setPointerCapture?.(pointerId);
+  document.body.classList.add("pane-resizing");
+  const move = (moveEvent: PointerEvent) => {
+    onMove(moveEvent.clientX);
+  };
+  const stop = () => {
+    document.body.classList.remove("pane-resizing");
+    window.removeEventListener("pointermove", move);
+    window.removeEventListener("pointerup", stop);
+    window.removeEventListener("pointercancel", stop);
+  };
+  window.addEventListener("pointermove", move);
+  window.addEventListener("pointerup", stop);
+  window.addEventListener("pointercancel", stop);
+}
+
 function createHistoryPath() {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   return `${HISTORY_ROOT}/${stamp}.json`;
@@ -868,6 +1261,52 @@ function parseHistoryFile(content: string): CodexHistoryFile | null {
   } catch {
     return null;
   }
+}
+
+function summarizeHistory(
+  path: string,
+  history: CodexHistoryFile,
+): CodexHistorySummary {
+  const firstUserMessage = history.messages.find((message) => message.role === "user");
+  const firstCodexMessage = history.messages.find(
+    (message) => message.role === "codex",
+  );
+  return {
+    path,
+    createdAt: history.createdAt,
+    updatedAt: history.updatedAt,
+    messageCount: history.messages.length,
+    preview:
+      firstUserMessage?.content.slice(0, 140) ??
+      firstCodexMessage?.content.slice(0, 140) ??
+      path,
+  };
+}
+
+function upsertHistorySummary(
+  items: CodexHistorySummary[],
+  path: string,
+  history: CodexHistoryFile,
+) {
+  const next = summarizeHistory(path, history);
+  return [next, ...items.filter((item) => item.path !== path)].sort((a, b) =>
+    b.updatedAt.localeCompare(a.updatedAt),
+  );
+}
+
+function historyTitle(item: CodexHistorySummary) {
+  return item.path.split("/").at(-1)?.replace(/\.json$/, "") ?? item.path;
+}
+
+function formatHistoryDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function isCodexMessage(message: unknown): message is CodexMessage {
