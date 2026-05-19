@@ -120,6 +120,13 @@ test("codex reads project files and commits only center markdown workspace", asy
   await expect(page.getByText("Codex is ready.")).toBeVisible();
   await page.getByLabel("Open Codex history").click();
   await expect(page.getByRole("heading", { name: "History" })).toBeVisible();
+  await expect(page.getByLabel(/Delete Codex chat/)).toHaveCount(2);
+  page.once("dialog", (dialog) => {
+    expect(dialog.message()).toContain("Delete Codex chat");
+    void dialog.accept();
+  });
+  await page.getByLabel(/Delete Codex chat/).first().click();
+  await expect(page.getByLabel(/Delete Codex chat/)).toHaveCount(1);
   await page
     .getByRole("button", {
       name: /source-note Automatic sequence control matters here/,

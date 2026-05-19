@@ -11,10 +11,12 @@ export interface CodexFallbackResponse {
 export function buildCodexFallbackResponse({
   message,
   study,
+  manuscriptContext,
   error,
 }: {
   message: string;
-  study: StudyInvestigation;
+  study: StudyInvestigation | null;
+  manuscriptContext?: string;
   error: string;
 }): CodexFallbackResponse | null {
   if (!isMagicAccuracy(message) && !isMagicProse(message)) return null;
@@ -22,8 +24,13 @@ export function buildCodexFallbackResponse({
   const title =
     action === "accuracy" ? "Codex accuracy fallback" : "Codex prose fallback";
   const sections = selectedSectionsFromMessage(message);
-  const directReferences = study.directReferences.slice(0, 5);
-  const claims = study.claims.slice(0, 3);
+  const directReferences = study?.directReferences.slice(0, 5) ?? [];
+  const claims = study?.claims.slice(0, 3) ?? [];
+  const proseFallback =
+    action === "prose"
+      ? buildProseFallbackMemo(title, sections, manuscriptContext, error)
+      : null;
+  if (proseFallback) return proseFallback;
   const memo = [
     `## ${title}`,
     "",
@@ -32,8 +39,8 @@ export function buildCodexFallbackResponse({
     sections.length
       ? `Selected section${sections.length === 1 ? "" : "s"}: ${sections.join(", ")}`
       : "Selected sections: all manuscript sections",
-    `Study scope: ${study.sourceCoverage.scope}`,
-    `Indexed coverage: ${study.sourceCoverage.matches} matches across ${study.sourceCoverage.chunks} chunks.`,
+    `Study scope: ${study?.sourceCoverage.scope ?? "not attached"}`,
+    `Indexed coverage: ${study?.sourceCoverage.matches ?? 0} matches across ${study?.sourceCoverage.chunks ?? 0} chunks.`,
     "",
     "### What can be said from indexed evidence",
     ...formatPassageList(directReferences),
@@ -57,6 +64,52 @@ export function buildCodexFallbackResponse({
       directReferences.length
         ? `Indexed evidence was available from ${directReferences.length} passage${directReferences.length === 1 ? "" : "s"}.`
         : "No direct indexed evidence was available for the fallback query.",
+    ].join("\n"),
+    workspaceAppend: memo,
+    workspaceReplace: "",
+    workspacePath: "",
+    workspaceCreates: [],
+  };
+}
+
+function buildProseFallbackMemo(
+  title: string,
+  sections: string[],
+  manuscriptContext: string | undefined,
+  error: string,
+): CodexFallbackResponse {
+  const sectionList = sections.length
+    ? sections.map((section) => `- ${section}`).join("\n")
+    : "- all manuscript sections";
+  const excerpt = manuscriptContext?.trim()
+    ? manuscriptContext.trim().slice(0, 2400)
+    : "No manuscript text was attached to the fallback.";
+  const memo = [
+    `## ${title}`,
+    "",
+    `Codex CLI did not finish: ${error}`,
+    "",
+    "Selected sections:",
+    sectionList,
+    "",
+    "### Editorial scope",
+    "- Grammar and syntax",
+    "- Flow, rhythm, continuity, and transitions",
+    "- Terminology consistency and argument structure",
+    "- Questions for the author rather than manuscript rewrites",
+    "",
+    "### Attached manuscript excerpt",
+    excerpt,
+    "",
+    "### Next step",
+    "- Rerun Check prose when the Codex bridge is responsive.",
+  ].join("\n");
+
+  return {
+    output: [
+      "Codex CLI did not finish, so Essai wrote a local prose fallback memo to the center workspace.",
+      `Reason: ${error}`,
+      "No source-evidence search was run for this prose pass.",
     ].join("\n"),
     workspaceAppend: memo,
     workspaceReplace: "",

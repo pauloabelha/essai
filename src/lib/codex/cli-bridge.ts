@@ -30,6 +30,7 @@ export interface CodexBridgeTurnInput {
   instructions: string;
   history: Array<{ role: string; content: string }>;
   studyContext?: string;
+  manuscriptContext?: string;
 }
 
 export interface CodexBridgeTurnOutput {
@@ -47,8 +48,8 @@ export interface CodexBridgeTurnEvents {
 }
 
 const REQUEST_TIMEOUT_MS = 30_000;
-const STALE_TURN_MS = 45_000;
-const TURN_TIMEOUT_MS = 90_000;
+const STALE_TURN_MS = 10 * 60_000;
+const TURN_TIMEOUT_MS = 5 * 60_000;
 
 class CodexAppServerBridge {
   private process: ChildProcessWithoutNullStreams | null = null;
@@ -364,6 +365,7 @@ function buildPrompt({
   instructions,
   history,
   studyContext,
+  manuscriptContext,
 }: CodexBridgeTurnInput) {
   const compactHistory = history
     .slice(-8)
@@ -389,6 +391,10 @@ ${workspaceTabs?.length ? workspaceTabs.map((tab) => `  - ${tab.title}: ${tab.pa
 - The web app will apply append/replace blocks to the active tab unless you include <codex-workspace-path>path</codex-workspace-path>.
 - If a new tab is warranted, return <codex-workspace-create title="Short title">...markdown...</codex-workspace-create>; the app will create it and make it current.
 - Mention file paths you used.
+- Keep the chat reply brief. Use chat for direct answers, status, and a compact summary of what you wrote.
+- Put substantive analysis, prose reviews, research notes, outlines, and durable working text in the scratchpad blocks instead of the chat.
+- If the user asks a direct question, answer it in chat first, then write only durable supporting notes to the scratchpad when useful.
+- When you update the scratchpad, the visible chat reply should usually be 1-3 sentences.
 
 Persistent Codex instructions from the user:
 ${instructions.trim() || "(none)"}
@@ -398,6 +404,9 @@ ${selectedSources.length ? selectedSources.map((source) => `- ${source}`).join("
 
 Study retrieval context from Essai's indexed sources:
 ${studyContext?.trim() || "(no indexed Study passages were attached)"}
+
+Selected manuscript context:
+${manuscriptContext?.trim() || "(no manuscript sections were attached)"}
 
 Current active Codex scratchpad (${workspacePath || "codex/workspace.md"}):
 ${workspace.slice(0, 12000) || "(empty)"}

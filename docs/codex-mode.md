@@ -4,7 +4,7 @@ Codex is Essai's source-grounded scholarly relationship engine. It is not a manu
 
 The right Codex panel is proxied to the local `codex` CLI through a warm `codex app-server` bridge. It uses the machine's existing Codex login and configuration, keeps per-book read-only Codex threads, queues turns per book, and collects assistant deltas until each turn completes.
 
-The panel is chat-shaped, but it is still governed by the Codex boundary: messages are operational records, not manuscript prose. User and Codex messages can be copied with the copy button on each message.
+The panel is chat-shaped, but it is still governed by the Codex boundary: messages are operational records, not manuscript prose. Chat should stay short: direct answers, status, and compact summaries of what Codex wrote. Substantive reviews, research notes, outlines, and durable working text belong in the center scratchpad. User and Codex messages can be copied with the copy button on each message.
 
 The Codex source rail and message panel are resizable on desktop. Their widths are remembered in local browser storage, matching Essai's other stretchable panes.
 
@@ -12,7 +12,7 @@ The top-left Codex rail is reserved for fixed "magic" calls rather than ordinary
 
 - **Search in sources**: opens a scoped source-selection box and sends a hardcoded source-search prompt.
 - **Check accuracy**: opens a manuscript-section selection box and asks Codex to compare claims against the archive.
-- **Check prose**: opens the same section-selection pattern and asks Codex for prose-level diagnosis without rewriting manuscript text.
+- **Check prose**: opens the same section-selection pattern and asks Codex for a concise prose-editor pass without rewriting manuscript text. Codex reads the selected manuscript text directly, infers the language and register, and applies a high-end essay/book standard such as piauí-level Portuguese or New Yorker-level English. It favors precise, high-confidence grammar, rhythm, flow, transition, terminology, and structure notes over broad guessing.
 
 These prompts live in `src/lib/codex/magic-prompts.ts` so the operations remain explicit, reviewable, and separate from ad hoc chat.
 
@@ -56,7 +56,7 @@ Codex panel conversations are saved as JSON under:
 codex/history/
 ```
 
-History files preserve the message sequence for later review without treating the conversation as manuscript text. The arrow control in the Codex panel opens the saved history list; choosing an entry loads that particular chat back into the panel.
+History files preserve the message sequence for later review without treating the conversation as manuscript text. The arrow control in the Codex panel opens the saved history list; choosing an entry loads that particular chat back into the panel. Each history entry has a delete control in its lower-right corner; deleting the active chat loads the next saved chat, or creates a fresh empty chat when none remain.
 
 ## Provenance
 
@@ -114,7 +114,7 @@ Markdown for a new scratchpad tab.
 
 Study passages expose a "Send to Codex" action. The selected passage is staged into the Codex Markdown workspace with source path, page, retrieval method, and search query. From there, the user can ask Codex to search the project, examine sections, append notes, reorganize the workspace, or commit the workspace file.
 
-Codex also uses the Study index as retrieval context. `/search <term>` queries the local Study archive directly, returning indexed passages with source file, page, confidence, and retrieval method. Normal Codex CLI turns also receive a compact Study retrieval context for the user's message and selected source scope, so PDF-derived evidence comes from the page-aware index rather than raw binary PDF reading.
+Codex also uses the Study index as retrieval context. `/search <term>` queries the local Study archive directly, returning indexed passages with source file, page, confidence, and retrieval method. Normal Codex CLI turns also receive a compact Study retrieval context for the user's message and selected source scope, so PDF-derived evidence comes from the page-aware index rather than raw binary PDF reading. Prose review is the exception: it attaches selected manuscript sections directly and skips source retrieval unless source context is explicitly needed.
 
 ## Write Integration
 

@@ -2,6 +2,7 @@ import path from "node:path";
 import { NextResponse } from "next/server";
 import { buildCodexFallbackResponse } from "@/lib/codex/fallback";
 import { codexBridge } from "@/lib/codex/cli-bridge";
+import { readBookFile } from "@/lib/projects/files";
 import { createLogger } from "@/lib/server/log";
 import { getServerStorage } from "@/lib/storage/server";
 import {
@@ -51,17 +52,26 @@ export async function POST(
 
   try {
     const storage = getServerStorage();
-    const study = await buildStudyInvestigation(storage, bookId, {
-      query: studyQueryFromMessage(message),
-      exhaustive: false,
-      sourcePaths:
-        body.selectedSources ?? legacySelectedSources(body.selectedSource),
-    });
-    const studyContext = formatStudyContext(study);
+    const selectedSources =
+      body.selectedSources ?? legacySelectedSources(body.selectedSource);
+    const manuscriptContext = await buildManuscriptContext(
+      storage,
+      bookId,
+      selectedSectionsFromMessage(message),
+    );
+    const study = shouldAttachStudyContext(message)
+      ? await buildStudyInvestigation(storage, bookId, {
+          query: studyQueryFromMessage(message),
+          exhaustive: false,
+          sourcePaths: selectedSources,
+        })
+      : null;
+    const studyContext = study ? formatStudyContext(study) : "";
     const fallback = (error: unknown) =>
       buildCodexFallbackResponse({
         message,
         study,
+        manuscriptContext,
         error:
           error instanceof Error
             ? error.message
@@ -73,11 +83,11 @@ export async function POST(
       workspace: body.workspace ?? body.notes ?? "",
       workspacePath: body.workspacePath,
       workspaceTabs: body.workspaceTabs,
-      selectedSources:
-        body.selectedSources ?? legacySelectedSources(body.selectedSource),
+      selectedSources,
       instructions: body.instructions ?? "",
       history: body.history ?? [],
       studyContext,
+      manuscriptContext,
     };
     if (wantsStream(request)) {
       return streamCodexTurn(input, request.signal, fallback);
@@ -104,9 +114,72 @@ export async function POST(
 }
 
 function studyQueryFromMessage(message: string) {
+  const sourceSearch = message.match(/^Search query:\s*(.+)$/im)?.[1]?.trim();
+  if (sourceSearch) return sourceSearch;
+  const sections = selectedSectionsFromMessage(message);
+  if (/Codex magic action:\s*Check accuracy\./i.test(message) && sections.length) {
+    return sections.map(sectionSearchTerm).join(" ");
+  }
   return message
     .replace(/^\/(search|related|source-links|backlinks)\s+/i, "")
     .trim();
+}
+
+function shouldAttachStudyContext(message: string) {
+  return !/Codex magic action:\s*Check prose\./i.test(message);
+}
+
+function selectedSectionsFromMessage(message: string) {
+  const marker = "Selected manuscript sections:";
+  const index = message.indexOf(marker);
+  if (index < 0) return [];
+  return message
+    .slice(index + marker.length)
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("- "))
+    .map((line) => line.slice(2).trim())
+    .filter(Boolean);
+}
+
+function sectionSearchTerm(path: string) {
+  return path
+    .split("/")
+    .at(-1)!
+    .replace(/\.[^.]+$/, "")
+    .replace(/[-_]+/g, " ");
+}
+
+async function buildManuscriptContext(
+  storage: ReturnType<typeof getServerStorage>,
+  bookId: string,
+  sections: string[],
+) {
+  const safeSections = sections.filter(
+    (section) =>
+      section.endsWith(".md") &&
+      !section.startsWith("sources/") &&
+      !section.startsWith("codex/") &&
+      !section.includes(".."),
+  );
+  if (!safeSections.length) return "";
+  const entries = await Promise.all(
+    safeSections.slice(0, 8).map(async (section) => {
+      try {
+        const content = await readBookFile(storage, bookId, section);
+        return [
+          `## ${section}`,
+          "",
+          content.length > 16_000
+            ? `${content.slice(0, 16_000).trimEnd()}\n\n[truncated]`
+            : content,
+        ].join("\n");
+      } catch {
+        return [`## ${section}`, "", "[could not read section]"].join("\n");
+      }
+    }),
+  );
+  return entries.join("\n\n---\n\n");
 }
 
 function formatStudyContext(study: StudyInvestigation) {

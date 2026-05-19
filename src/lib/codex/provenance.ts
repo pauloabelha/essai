@@ -40,6 +40,24 @@ export function provenanceLabel(provenance: SourceProvenance) {
   return `${provenance.sourcePath}${page}`;
 }
 
+export function formatProvenanceMarkdownBlock(
+  input: Partial<SourceProvenance>,
+  now = new Date(),
+) {
+  const provenance = normalizeProvenance(input, now);
+  return [
+    "```essai-provenance",
+    `source: ${provenance.sourcePath}`,
+    provenance.page ? `page: ${provenance.page}` : "",
+    `retrieval: ${provenance.retrievalMethod}`,
+    provenance.originatingQuery ? `query: ${provenance.originatingQuery}` : "",
+    `captured: ${provenance.timestamp}`,
+    "```",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
 function cleanOptional(value?: string) {
   const cleaned = value?.trim();
   return cleaned || undefined;

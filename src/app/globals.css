@@ -9,6 +9,7 @@
   --rule: #ddd3c5;
   --accent: #6f1d1b;
   --accent-ink: #fff9f1;
+  --danger: #a23a2f;
   --editor-bg: #fcfaf6;
   --editor-ink: #1f1b16;
   --editor-muted: #756d62;
@@ -27,6 +28,7 @@
   --rule: #342f27;
   --accent: #d8b56f;
   --accent-ink: #19140c;
+  --danger: #e07b6f;
   --editor-bg: #0f0e0c;
   --editor-ink: #f3eadc;
   --editor-muted: #aa9f90;
@@ -1980,20 +1982,48 @@ summary {
   font-size: 13px;
 }
 
-.codex-history-list button {
+.codex-history-item {
+  position: relative;
   display: grid;
-  gap: 4px;
-  width: 100%;
   border: 1px solid var(--rule);
   border-radius: 8px;
   background: color-mix(in srgb, var(--surface) 92%, var(--paper));
-  padding: 10px;
+}
+
+.codex-history-item.active {
+  border-color: color-mix(in srgb, var(--accent) 38%, var(--rule));
+  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+}
+
+.codex-history-item > button:first-child {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  padding: 10px 42px 10px 10px;
   text-align: left;
 }
 
-.codex-history-list button.active {
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--rule));
-  background: color-mix(in srgb, var(--accent) 8%, var(--surface));
+.codex-history-item > button:last-child {
+  position: absolute;
+  right: 7px;
+  bottom: 7px;
+  display: grid;
+  width: 27px;
+  height: 27px;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+}
+
+.codex-history-item > button:last-child:hover {
+  color: var(--danger);
+  background: color-mix(in srgb, var(--danger) 8%, transparent);
 }
 
 .codex-history-list span,
