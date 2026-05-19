@@ -193,6 +193,9 @@ export function CodexWorkspace({
     useState(WORKSPACE_PATH);
   const [workspace, setWorkspace] = useState("");
   const [workspaceStatus, setWorkspaceStatus] = useState("Loading workspace.");
+  const [codexOverview, setCodexOverview] = useState<CodexResponse | null>(
+    null,
+  );
   const [messages, setMessages] = useState<CodexMessage[]>([OPENING_MESSAGE]);
   const [input, setInput] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState("");
@@ -485,7 +488,7 @@ export function CodexWorkspace({
     if (!bookId) return;
     void loadHistory();
     void loadWorkspaceTabs();
-    void loadCodex();
+    void loadCodex().then(setCodexOverview);
   }, [bookId, loadCodex, loadHistory, loadWorkspaceTabs]);
 
   useEffect(() => {
@@ -1257,6 +1260,19 @@ export function CodexWorkspace({
                 <em>active</em>
               </button>
             ))}
+          </div>
+          <div className="codex-active-scope">
+            <p className="eyebrow">Relationship Trail</p>
+            {codexOverview ? (
+              <p>
+                {codexOverview.cards.length} committed card
+                {codexOverview.cards.length === 1 ? "" : "s"} with{" "}
+                {codexOverview.related.relationships.length} visible link
+                {codexOverview.related.relationships.length === 1 ? "" : "s"}.
+              </p>
+            ) : (
+              <p>Reading committed Codex cards.</p>
+            )}
           </div>
         </section>
         <section className="codex-instructions-panel">

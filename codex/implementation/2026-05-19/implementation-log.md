@@ -96,3 +96,36 @@ Result:
 1 test passed.
 
 ---
+
+## 2026-05-19 02:02
+
+Implemented:
+Added a passive Relationship Trail summary to the Codex source rail.
+
+Triggered By:
+
+- `codex/reviews/2026-05-19/issues/ISSUE-003-relationship-visibility-is-too-local.md`
+- `codex/reviews/2026-05-19/relationship-review.md`
+
+Observed Before:
+Codex had relationship commands such as `/related`, `/backlinks`, and `/source-links`, but the surface did not quietly disclose whether any committed relationship cards or links existed. The user had to know which command to ask.
+
+Implementation:
+
+- stores the initial `/codex` overview response in `CodexWorkspace`
+- displays committed card and visible link counts in the left Codex rail
+- adds a long-session e2e assertion that the Relationship Trail is visible in Codex mode
+
+Result:
+The workspace gains a low-noise sign of intellectual structure without adding a dashboard or requiring automatic inference.
+
+Philosophical Address:
+Relationship visibility becomes passive and inspectable. The UI says what durable Codex artifacts exist, while leaving authorship and interpretation with the human.
+
+Verification:
+`npx playwright test tests/e2e/long-session.spec.ts --project=chromium`
+
+Result:
+1 test passed.
+
+---

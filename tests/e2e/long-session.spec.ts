@@ -67,6 +67,7 @@ test("long scholar session preserves manuscript while auxiliary research accumul
   await expect(
     page.getByRole("heading", { name: "codex/workspace.md" }),
   ).toBeVisible();
+  await expect(page.getByText("Relationship Trail")).toBeVisible();
 
   const workspace = page.getByLabel("Codex Markdown workspace");
   await workspace.fill(

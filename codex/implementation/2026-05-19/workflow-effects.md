@@ -19,3 +19,20 @@ Protective rather than visible. It prevents later improvements from quietly turn
 
 Observed Test Friction:
 The accessible name collision around "Codex" showed that commands embedded inside Study results can overlap with global mode language. This is not necessarily a product bug, but it is a useful reminder for future UI refinement: mode switches should remain easy to target cognitively and technically.
+
+## 2026-05-19: Relationship Trail
+
+Workflow Improved:
+Opening Codex mode now gives the writer a quiet answer to "is there already committed relationship structure here?"
+
+Before:
+The user needed to run relationship commands or inspect files to know whether Codex cards and links existed.
+
+After:
+The left rail reports committed card and link counts. This keeps the information peripheral and durable rather than making it a central dashboard.
+
+Cognitive Impact:
+Low. The wording is count-based and does not ask the user to act.
+
+Calmness Impact:
+Positive if it stays small. It should not grow into alerts, scores, completion states, or graph pressure.
