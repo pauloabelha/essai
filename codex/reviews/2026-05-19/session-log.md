@@ -88,6 +88,9 @@ Actions:
 
 Observations:
 - The screenshot set is intentionally small and documentary: it establishes the visual state of the core rooms at the beginning of the quality-review branch.
+- The Study route handled the default `programmable machines` query over one selected PDF source with 1,740 candidate chunks, 3 positive lexical matches, and a measured investigation time of 616ms in the server log.
+- The dev server reported a slow filesystem warning for `.next/dev`; this may be local-environment noise, but it belongs in the performance trail because Essai's felt responsiveness is central to the review.
+- Entering Codex triggered repeated workspace and history reads, followed by an autosave PUT to the Codex history JSON. This is acceptable in the small session but should be watched during long Codex review sessions.
 - The next screenshot pass should include PDF source reading, highlighted PDF search results, Codex history, and a Study-to-Codex passage handoff.
 - Screenshots should be named by workflow, not by implementation detail, so future readers can navigate them as evidence.
 

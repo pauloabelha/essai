@@ -20,4 +20,4 @@ The test suite is already serious and unusually aligned with the product's ethic
 - Inspect `docs/codex-mode.md` against implementation line by line.
 - Evaluate whether relationship visibility should become a persistent restrained surface.
 
-The review archive is now present and navigable, with an initial screenshot baseline for Write, Study, Codex, and mobile Write mode. Its next value will come from inhabiting Essai for longer sessions and letting the notes thicken around real use.
+The review archive is now present and navigable, with an initial screenshot baseline for Write, Study, Codex, and mobile Write mode. The first server-log baseline suggests Study can build a selected-source investigation over 1,740 chunks in roughly 616ms on this machine, while Codex mode performs multiple workspace/history reads that deserve long-session profiling. The archive's next value will come from inhabiting Essai for longer sessions and letting the notes thicken around real use.

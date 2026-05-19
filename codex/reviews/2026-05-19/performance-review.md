@@ -18,6 +18,16 @@ Risks:
 - The route builds a full investigation object for each query. Long-session testing should measure whether source-heavy books remain quiet.
 - `files` is in the Study effect dependency list, so broad file changes may refresh Study even when the visible query did not meaningfully change.
 
+Observed baseline from the screenshot pass:
+- Query: `programmable machines`
+- Scope: one selected PDF source
+- Candidate chunks: 1,740
+- Positive matches: 3
+- Retrieval: lexical matches
+- Server-measured investigation time: 616ms
+
+This is usable for an initial selected-source pass, but the result quality deserves review because the top lexical matches looked weakly related in the server preview. Ranking speed and ranking relevance need to be judged together.
+
 ## Codex Responsiveness
 
 Codex has two performance dimensions:
@@ -25,6 +35,8 @@ Codex has two performance dimensions:
 - CLI/proxy response latency
 
 The workspace must remain immediate even if the Codex panel is waiting. The current architecture separates the center workspace from message state, which helps. The review should verify that typing in the workspace stays smooth during `/search-project`, `/read`, and local CLI calls.
+
+During screenshot capture, entering Codex mode triggered several reads of `codex/workspace.md` and the active `codex/history/*.json`, followed by an autosave write to history. This should be profiled in a longer session with many history files and workspace tabs.
 
 ## PDF Rendering
 
@@ -40,3 +52,4 @@ Long-session questions:
 
 Pane widths are restored from local storage after mount. This can cause small initial layout shifts. The review should capture screenshots immediately after load and after width restoration to see whether the page visibly jumps.
 
+The dev server also reported a slow filesystem warning for `.next/dev`. This may be an environment artifact, but it reinforces the need to separate local development filesystem latency from application-level interaction latency in future measurements.
