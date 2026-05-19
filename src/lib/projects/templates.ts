@@ -68,6 +68,7 @@ The manuscript is written only by the human author. AI may organize notes and su
 - objects/ gathers historical, technical, or material examples.
 - sources/ grounds claims in books, papers, quotations, and evidence.
 - sources/files/raw/ stores uploaded source files captured through the interface.
+- codex/workspace.md is the shared Markdown workbench for human and Codex inquiry.
 - codex/cards/ stores source-grounded relationship cards.
 - codex/history/ stores saved Codex panel conversations.
 - drafts/ holds exploratory prose outside the canonical manuscript.
@@ -88,6 +89,12 @@ AI suggestions for manuscript files belong here as reviewable proposals only. Ne
     "notes.md": `# Notes
 
 Fast captures live here until the author decides where they belong.
+`,
+    "codex/workspace.md": `# Codex Workspace
+
+A shared Markdown workbench for human and Codex inquiry.
+
+Codex may suggest, append, or reorganize this file with permission through the Codex panel. Manuscript section files remain human-written only.
 `,
     "concepts/procedural-externalization.md": `# Procedural externalization
 
@@ -157,6 +164,7 @@ The Markdown files in sources/ remain the readable index.
 
 Codex cards, trails, sessions, and links live here as file-native scholarly apparatus.
 
+- workspace.md is the shared Markdown workbench visible in the center Codex panel.
 - cards/ stores committed research cards.
 - history/ stores saved Codex panel conversations.
 - trails/ can hold intellectual lineages.

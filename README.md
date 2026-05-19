@@ -8,7 +8,7 @@ It is built for books, essays, research notes, claims, objects, concepts, and fo
 
 Essai is not an AI writing app. It is a human writing environment.
 
-The canonical manuscript is sacred. Every word in `main.md` is written by the human author. AI may organize, classify, summarize, suggest links, detect contradictions, extract claims, and propose diffs in auxiliary files. AI may not silently rewrite manuscript prose, generate chapters, overwrite author text, or “improve style” automatically.
+The canonical manuscript is sacred. Every word in manuscript section files is written by the human author. AI may organize, classify, summarize, suggest links, detect contradictions, extract claims, and propose diffs in auxiliary files. AI may not silently rewrite manuscript prose, generate chapters, overwrite author text, or “improve style” automatically.
 
 The aim is restraint: readable typography, durable files, fast navigation, and an interface that feels closer to an editorial room than a productivity dashboard.
 
@@ -16,7 +16,7 @@ The aim is restraint: readable typography, durable files, fast navigation, and a
 
 Essai opens in **Write** mode: one central Markdown editor, no permanent preview, and as much calm space as possible for drafting.
 
-The left pane in Write mode is a manuscript section tree, not a file browser. It shows section names only. Each section points to its own Markdown file through `book.json`, so section structure stays in project metadata while the manuscript remains plain files on disk.
+The left pane in Write mode is a manuscript section tree, not a file browser. It shows section names only. Each section points to its own Markdown file through `book.json`, so section structure stays in project metadata while the manuscript remains plain files on disk. Renaming a section also renames its Markdown file to the slugified section title, keeping the Write label, Codex section scope, and file path attached.
 
 The four modes are:
 
@@ -52,32 +52,32 @@ PDF sources render inside Study mode with a local PDF.js reader rather than the 
 
 For long PDFs, Study renders a small page window around the active page instead of mounting the whole document at once. This keeps source reading responsive on phones while preserving page jumps, zoom controls, and match highlighting.
 
-Study mode never writes to `main.md`. Its summaries and pathways are only interpretive views over auxiliary project files. The right capture panel stays available in Study mode, so notes and new sources can be added while the source shelf remains visible.
+Study mode never writes to manuscript section files. Its summaries and pathways are only interpretive views over auxiliary project files. The right capture panel stays available in Study mode, so notes and new sources can be added while the source shelf remains visible.
 
 ## Codex Mode
 
-Codex is Essai's scholarly apparatus layer. It is a project-aware research panel beside editable Markdown notes. Codex may read manuscript sections, sources, concepts, objects, notes, and Codex files so it can answer questions and examine what has been written. It may not edit manuscript section files.
+Codex is Essai's scholarly apparatus layer. It is a project-aware research panel beside a shared editable Markdown workspace. Codex may read manuscript sections, sources, concepts, objects, notes, and Codex files so it can answer questions and examine what has been written. It may update only the Codex workspace through the panel, never manuscript section files.
 
 The first implementation adds:
 
 - a Codex mode tab
 - a left rail of fixed Codex magic calls for source search, accuracy review, and prose review
-- a central editable `codex/notes.md` Markdown file
+- a central editable `codex/workspace.md` Markdown file where the human and Codex can co-develop research understanding
 - a right Codex message panel proxied to the local `codex` CLI
 - copy buttons for user and Codex messages
 - saved conversation history under `codex/history/`
 - indexed Study search through `/search`
 - project-wide read commands such as `/search-project`, `/read`, and `/examine-section`
-- note-writing commands such as `/append-note`, `/source-note`, and `/commit-notes`
+- workspace-writing commands such as `/append-note`, `/source-note`, and `/commit-workspace`
 - relationship commands such as `/related`, `/backlinks`, and `/source-links`
 - Study passage handoff into Codex
 
-Magic call prompts are hardcoded in `src/lib/codex/magic-prompts.ts`. Each magic call opens a small scope selector before sending the prompt: source search selects source files, while accuracy and prose checks select manuscript section files.
+Magic call prompts are hardcoded in `src/lib/codex/magic-prompts.ts`. Each magic call opens a small scope selector before sending the prompt: source search selects source files, while accuracy and prose checks select manuscript sections by their Write-mode section names.
 
-Codex notes live under:
+The shared Codex workspace lives under:
 
 ```txt
-codex/notes.md
+codex/workspace.md
 ```
 
 Codex panel histories are saved as JSON under:
@@ -86,7 +86,7 @@ Codex panel histories are saved as JSON under:
 codex/history/
 ```
 
-The Codex CLI proxy keeps a warm `codex app-server` bridge, runs each book in a read-only Codex thread, and uses the local CLI login, such as a ChatGPT-backed `codex login`. Codex writes only auxiliary Codex files unless the human author manually edits elsewhere. It never silently mutates `main.md` or section files, and it never inserts generated prose into the manuscript. See `docs/codex-mode.md` for the full design contract.
+The Codex CLI proxy keeps a warm `codex app-server` bridge, runs each book in a read-only Codex thread, and uses the local CLI login, such as a ChatGPT-backed `codex login`. Codex writes only auxiliary Codex files unless the human author manually edits elsewhere. It never silently mutates manuscript section files, and it never inserts generated prose into the manuscript. See `docs/codex-mode.md` for the full design contract.
 
 ## Notes And Sources Capture
 
@@ -201,7 +201,7 @@ projects/
   my-book/
     book.json
     README.md
-    main.md
+    main.md                  # or the slugified first section path
     notes.md
     main.suggestions.md
     concepts/
@@ -216,7 +216,7 @@ projects/
       files/
         raw/
     codex/
-      notes.md
+      workspace.md
       cards/
       history/
       sessions/
@@ -253,7 +253,7 @@ Text sources and uploaded source files are deliberately handled as archive opera
 - Uploaded files from the interface live under `sources/files/raw/`.
 - Markdown indexes link to uploaded files with relative links, so the project folder remains portable.
 - `sources/.study-index.json` is refreshed after every source capture or file upload so Study search and future search backends can use the latest archive state.
-- AI may later classify or summarize sources, but it must not alter `main.md` without an explicit human action.
+- AI may later classify or summarize sources, but it must not alter manuscript section files without an explicit human action.
 
 ## Setup
 

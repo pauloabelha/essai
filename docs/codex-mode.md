@@ -1,6 +1,6 @@
 # Codex Mode
 
-Codex is Essai's source-grounded scholarly relationship engine. It is not a manuscript generator or writing copilot. It is a manuscript-adjacent apparatus for reading the project, answering research questions, editing Codex notes, and turning sources, excerpts, notes, concepts, claims, objects, and chapters into an inspectable scholarly structure.
+Codex is Essai's source-grounded scholarly relationship engine. It is not a manuscript generator or writing copilot. It is a manuscript-adjacent apparatus for reading the project, answering research questions, editing a shared Codex workspace, and turning sources, excerpts, notes, concepts, claims, objects, and chapters into an inspectable scholarly structure.
 
 The right Codex panel is proxied to the local `codex` CLI through a warm `codex app-server` bridge. It uses the machine's existing Codex login and configuration, keeps per-book read-only Codex threads, queues turns per book, and collects assistant deltas until each turn completes.
 
@@ -16,25 +16,27 @@ The top-left Codex rail is reserved for fixed "magic" calls rather than ordinary
 
 These prompts live in `src/lib/codex/magic-prompts.ts` so the operations remain explicit, reviewable, and separate from ad hoc chat.
 
+The manuscript scope picker displays the same section names shown in Write mode. Internally Codex still receives file paths, but the user-facing selector follows the manuscript outline instead of exposing raw filenames.
+
 ## Model
 
 Essai keeps three boundaries clear:
 
 - Write is the canonical manuscript. Human prose only.
 - Study is the source investigation room. Search, read, and inspect archive material.
-- Codex is the relationship and note workbench. It can read sources, manuscript sections, concepts, objects, notes, and Codex files. It can edit Codex notes, but it cannot edit manuscript section files.
+- Codex is the relationship and workspace workbench. It can read sources, manuscript sections, concepts, objects, notes, and Codex files. It can update the shared Codex Markdown workspace, but it cannot edit manuscript section files.
 
 Codex bridges the archive and manuscript structure without mutating manuscript prose.
 
 ## Research Cards
 
-The first visible Codex object is the central Markdown notes file:
+The first visible Codex object is the central Markdown workspace:
 
 ```txt
-codex/notes.md
+codex/workspace.md
 ```
 
-Codex can append source-aware notes into this file and commit it when the user asks. Research cards remain a durable future object. A card may represent a note, concept, claim, object, excerpt, source link, chapter reference, or relationship trail. Cards are stored as Markdown under:
+This file is a live collaboration surface. The human can edit it directly; Codex sees the current contents each turn and may append or replace the workspace Markdown when the answer should reorganize the investigation. Codex must preserve useful human text and keep grounded claims tied to visible evidence. Research cards remain a durable future object. A card may represent a note, concept, claim, object, excerpt, source link, chapter reference, or relationship trail. Cards are stored as Markdown under:
 
 ```txt
 codex/cards/
@@ -84,17 +86,29 @@ Previewing does not write files. Committing writes only Codex files.
 
 ## Manuscript Protection
 
-Codex never rewrites `main.md`, inserts generated prose, creates chapters automatically, or changes manuscript section text. It may read those files and quote or examine them in its panel. The app-server thread is read-only; when Codex wants to change notes, it returns an explicit notes-append block and the web app applies that block only to `codex/notes.md`.
+Codex never rewrites manuscript section files, inserts generated prose, creates chapters automatically, or changes manuscript section text. It may read those files and quote or examine them in its panel. The app-server thread is read-only; when Codex wants to update the center workspace, it returns an explicit workspace block and the web app applies that block only to `codex/workspace.md`.
+
+Workspace update blocks are constrained:
+
+```txt
+<codex-workspace-append>
+Markdown to append.
+</codex-workspace-append>
+
+<codex-workspace-replace>
+Complete revised workspace Markdown.
+</codex-workspace-replace>
+```
 
 ## Study Integration
 
-Study passages expose a "Send to Codex" action. The selected passage is staged into the Codex Markdown notes with source path, page, retrieval method, and search query. From there, the user can ask Codex to search the project, examine sections, append notes, or commit the notes file.
+Study passages expose a "Send to Codex" action. The selected passage is staged into the Codex Markdown workspace with source path, page, retrieval method, and search query. From there, the user can ask Codex to search the project, examine sections, append notes, reorganize the workspace, or commit the workspace file.
 
 Codex also uses the Study index as retrieval context. `/search <term>` queries the local Study archive directly, returning indexed passages with source file, page, confidence, and retrieval method. Normal Codex CLI turns also receive a compact Study retrieval context for the user's message and selected source scope, so PDF-derived evidence comes from the page-aware index rather than raw binary PDF reading.
 
 ## Write Integration
 
-Write mode remains manuscript-first. `Cmd/Ctrl+S` saves the current CodeMirror document directly from the editor state, so the active manuscript section can be persisted without leaving the writing surface. Codex may read manuscript sections for analysis, but it cannot write them.
+Write mode remains manuscript-first. `Cmd/Ctrl+S` saves the current CodeMirror document directly from the editor state, so the active manuscript section can be persisted without leaving the writing surface. Renaming a section in the Write outline renames its backing Markdown file to the slugified section title and updates `book.json`; Codex magic actions then show that section title while continuing to address the underlying file path. Codex may read manuscript sections for analysis, but it cannot write them.
 
 ## AI Boundaries
 

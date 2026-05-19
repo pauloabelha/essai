@@ -4,12 +4,12 @@
   "subtitle": "",
   "language": "pt-BR",
   "createdAt": "2026-05-14T21:33:03.117Z",
-  "updatedAt": "2026-05-19T02:36:03.209Z",
+  "updatedAt": "2026-05-19T03:19:21.408Z",
   "sections": [
     {
       "id": "main",
       "title": "Flauta Programavel",
-      "path": "main.md"
+      "path": "flauta-programavel.md"
     }
   ]
 }

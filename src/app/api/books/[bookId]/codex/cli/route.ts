@@ -3,7 +3,10 @@ import { NextResponse } from "next/server";
 import { codexBridge } from "@/lib/codex/cli-bridge";
 import { createLogger } from "@/lib/server/log";
 import { getServerStorage } from "@/lib/storage/server";
-import { buildStudyInvestigation, type StudyInvestigation } from "@/lib/study/archive";
+import {
+  buildStudyInvestigation,
+  type StudyInvestigation,
+} from "@/lib/study/archive";
 
 export const runtime = "nodejs";
 
@@ -16,6 +19,7 @@ export async function POST(
   const { bookId } = await context.params;
   const body = (await request.json()) as {
     message?: string;
+    workspace?: string;
     notes?: string;
     selectedSource?: string;
     selectedSources?: string[];
@@ -48,18 +52,20 @@ export async function POST(
       await buildStudyInvestigation(storage, bookId, {
         query: studyQueryFromMessage(message),
         exhaustive: false,
-        sourcePaths: body.selectedSources ?? legacySelectedSources(body.selectedSource),
+        sourcePaths:
+          body.selectedSources ?? legacySelectedSources(body.selectedSource),
       }),
     );
     const input = {
-        projectRoot,
-        message,
-        notes: body.notes ?? "",
-        selectedSources: body.selectedSources ?? legacySelectedSources(body.selectedSource),
-        instructions: body.instructions ?? "",
-        history: body.history ?? [],
-        studyContext,
-      };
+      projectRoot,
+      message,
+      workspace: body.workspace ?? body.notes ?? "",
+      selectedSources:
+        body.selectedSources ?? legacySelectedSources(body.selectedSource),
+      instructions: body.instructions ?? "",
+      history: body.history ?? [],
+      studyContext,
+    };
     if (wantsStream(request)) {
       return streamCodexTurn(input, request.signal);
     }
@@ -92,7 +98,9 @@ function formatStudyContext(study: StudyInvestigation) {
     `Query: ${study.query}`,
     `Scope: ${study.sourceCoverage.scope}`,
     `Coverage: ${study.sourceCoverage.matches} matches across ${study.sourceCoverage.chunks} indexed chunks; ${study.sourceCoverage.exactMatches} exact, ${study.sourceCoverage.lexicalMatches} lexical.`,
-    references.length ? "" : "Direct references: none found in the Study index.",
+    references.length
+      ? ""
+      : "Direct references: none found in the Study index.",
     references.length ? "Direct references:" : "",
     ...references.map(
       (reference, index) =>
@@ -138,7 +146,9 @@ function streamCodexTurn(
         if (closed) return;
         try {
           controller.enqueue(
-            encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`),
+            encoder.encode(
+              `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`,
+            ),
           );
         } catch {
           closed = true;

@@ -34,6 +34,24 @@ test("create project, capture notes and sources, write, preview, and navigate wi
   await expect(
     page.getByRole("navigation", { name: "Sections" }).getByText("main.md"),
   ).toHaveCount(0);
+  await page
+    .getByRole("navigation", { name: "Sections" })
+    .getByRole("button", { name: "Main", exact: true })
+    .dblclick();
+  await page.getByLabel("Section title").fill("Opening Thesis");
+  await page.keyboard.press("Enter");
+  await expect(
+    page
+      .getByRole("navigation", { name: "Sections" })
+      .getByRole("button", { name: "Opening Thesis", exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText("opening-thesis.md")).toBeVisible();
+  const renamedMain = await request.get(
+    `/api/books/${book.id}/files/opening-thesis.md`,
+  );
+  expect(renamedMain.ok()).toBe(true);
+  const oldMain = await request.get(`/api/books/${book.id}/files/main.md`);
+  expect(oldMain.status()).toBe(404);
   const sectionsPane = page.getByRole("complementary", {
     name: "Manuscript sections",
   });
@@ -42,6 +60,8 @@ test("create project, capture notes and sources, write, preview, and navigate wi
   const sectionsGripBox = await sectionsGrip.boundingBox();
   expect(sectionsBefore).not.toBeNull();
   expect(sectionsGripBox).not.toBeNull();
+  expect(sectionsBefore!.width).toBeGreaterThan(150);
+  expect(sectionsGripBox!.width).toBe(6);
   await page.mouse.move(sectionsGripBox!.x + 3, sectionsGripBox!.y + 20);
   await page.mouse.down();
   await page.mouse.move(sectionsGripBox!.x + 65, sectionsGripBox!.y + 20);
@@ -93,17 +113,19 @@ test("create project, capture notes and sources, write, preview, and navigate wi
 
   await page
     .getByRole("navigation")
-    .getByRole("button", { name: "Main" })
+    .getByRole("button", { name: "Opening Thesis" })
     .click();
   await page.locator(".cm-content").click();
   await page.keyboard.type("A sentence about [[music-cylinder]].");
   await page.keyboard.press(
     process.platform === "darwin" ? "Meta+S" : "Control+S",
   );
-  const savedMain = (await (
-    await request.get(`/api/books/${book.id}/files/main.md`)
+  const savedManuscript = (await (
+    await request.get(`/api/books/${book.id}/files/opening-thesis.md`)
   ).json()) as { content: string };
-  expect(savedMain.content).toContain("A sentence about [[music-cylinder]].");
+  expect(savedManuscript.content).toContain(
+    "A sentence about [[music-cylinder]].",
+  );
 
   await page.getByRole("button", { name: "Preview" }).click();
   await expect(page.locator(".preview-shell")).toContainText(

@@ -1,9 +1,6 @@
 "use client";
 
-import type {
-  CSSProperties,
-  PointerEvent as ReactPointerEvent,
-} from "react";
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -90,22 +87,25 @@ interface CodexHistorySummary {
 
 interface CodexCliResponse {
   output?: string;
+  workspaceAppend?: string;
+  workspaceReplace?: string;
   notesAppend?: string;
   error?: string;
 }
 
 interface CodexCliRequest {
   message: string;
-  notes: string;
+  workspace: string;
   selectedSources: string[];
   instructions: string;
   history: Array<{ role: string; content: string }>;
 }
 
-const NOTES_PATH = "codex/notes.md";
+const WORKSPACE_PATH = "codex/workspace.md";
+const LEGACY_NOTES_PATH = "codex/notes.md";
 const HISTORY_ROOT = "codex/history";
 const DEFAULT_CODEX_INSTRUCTIONS =
-  "Read manuscript sections and sources freely, but never edit human-written section files. Keep notes source-grounded and append only to Codex notes when asked.";
+  "Read manuscript sections and sources freely, but never edit human-written section files. Keep workspace changes source-grounded and preserve human edits in the center Codex workspace.";
 const MAGIC_ACTIONS: Array<{
   id: CodexMagicAction;
   title: string;
@@ -148,9 +148,9 @@ export function CodexWorkspace({
   onOpenChapter: (path: string) => void;
 }) {
   const [selectedSources, setSelectedSources] = useState<string[]>([]);
-  const [sourceAccessedAt, setSourceAccessedAt] = useState<Record<string, number>>(
-    {},
-  );
+  const [sourceAccessedAt, setSourceAccessedAt] = useState<
+    Record<string, number>
+  >({});
   const [codexInstructions, setCodexInstructions] = useState(
     DEFAULT_CODEX_INSTRUCTIONS,
   );
@@ -161,30 +161,38 @@ export function CodexWorkspace({
   const [magicSections, setMagicSections] = useState<string[]>([]);
   const [scopePaneWidth, setScopePaneWidth] = useState(310);
   const [chatPaneWidth, setChatPaneWidth] = useState(360);
-  const [notes, setNotes] = useState("");
-  const [notesStatus, setNotesStatus] = useState("Loading notes.");
+  const [workspace, setWorkspace] = useState("");
+  const [workspaceStatus, setWorkspaceStatus] = useState("Loading workspace.");
   const [messages, setMessages] = useState<CodexMessage[]>([
     {
       id: "opening",
       role: "codex",
       content:
-        "Codex is ready. Select a source, write Markdown notes, and ask for relationships, backlinks, claims, concepts, or source links.",
+        "Codex is ready. Use the center Markdown workspace for shared inquiry; ask for relationships, backlinks, claims, concepts, or source links.",
       status: "done",
     },
   ]);
   const [input, setInput] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState("");
   const [historyPath, setHistoryPath] = useState("");
-  const [historyStatus, setHistoryStatus] = useState("History loading.");
   const [historyLoaded, setHistoryLoaded] = useState(false);
   const [historyView, setHistoryView] = useState<"chat" | "history">("chat");
   const [historyItems, setHistoryItems] = useState<CodexHistorySummary[]>([]);
-  const [response, setResponse] = useState<CodexResponse | null>(null);
   const messageEndRef = useRef<HTMLDivElement | null>(null);
   const messagesRef = useRef<CodexMessage[]>(messages);
   const chapterOptions = useMemo(() => flattenSections(chapters), [chapters]);
   const sectionPaths = useMemo(
     () => [...new Set(chapterOptions.map((section) => section.path))],
+    [chapterOptions],
+  );
+  const sectionTitlesByPath = useMemo(
+    () =>
+      new Map(
+        chapterOptions.map((section) => [
+          section.path,
+          section.title || section.path,
+        ]),
+      ),
     [chapterOptions],
   );
   const sortedSources = useMemo(
@@ -197,12 +205,17 @@ export function CodexWorkspace({
   );
 
   useEffect(() => {
-    setScopePaneWidth(readStoredNumber("essai:pane:codex-scope", 310));
-    setChatPaneWidth(readStoredNumber("essai:pane:codex-chat", 360));
+    setScopePaneWidth(
+      readStoredNumber("essai:pane:codex-scope", 310, 230, 520),
+    );
+    setChatPaneWidth(readStoredNumber("essai:pane:codex-chat", 360, 280, 560));
   }, []);
 
   useEffect(() => {
-    window.localStorage.setItem("essai:pane:codex-scope", String(scopePaneWidth));
+    window.localStorage.setItem(
+      "essai:pane:codex-scope",
+      String(scopePaneWidth),
+    );
   }, [scopePaneWidth]);
 
   useEffect(() => {
@@ -210,10 +223,7 @@ export function CodexWorkspace({
   }, [chatPaneWidth]);
 
   const startCodexPaneResize = useCallback(
-    (
-      side: "left" | "right",
-      event: ReactPointerEvent<HTMLButtonElement>,
-    ) => {
+    (side: "left" | "right", event: ReactPointerEvent<HTMLButtonElement>) => {
       const startX = event.clientX;
       const startScope = scopePaneWidth;
       const startChat = chatPaneWidth;
@@ -236,30 +246,42 @@ export function CodexWorkspace({
       const result = (await (
         await fetch(`/api/books/${bookId}/codex?${params}`)
       ).json()) as CodexResponse;
-      setResponse(result);
       return result;
     },
     [bookId],
   );
 
-  const loadNotes = useCallback(async () => {
+  const loadWorkspace = useCallback(async () => {
     const response = await fetch(
-      `/api/books/${bookId}/files/${encodeURIComponentPath(NOTES_PATH)}`,
+      `/api/books/${bookId}/files/${encodeURIComponentPath(WORKSPACE_PATH)}`,
     );
     if (response.ok) {
       const file = (await response.json()) as { content: string };
-      setNotes(file.content);
-      setNotesStatus(`${NOTES_PATH} loaded.`);
+      setWorkspace(file.content);
+      setWorkspaceStatus(`${WORKSPACE_PATH} loaded.`);
       return;
     }
-    const initial = "# Codex Notes\n\n";
-    await fetch(`/api/books/${bookId}/files/${encodeURIComponentPath(NOTES_PATH)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: initial }),
-    });
-    setNotes(initial);
-    setNotesStatus(`${NOTES_PATH} created.`);
+
+    const legacyResponse = await fetch(
+      `/api/books/${bookId}/files/${encodeURIComponentPath(LEGACY_NOTES_PATH)}`,
+    );
+    const initial = legacyResponse.ok
+      ? ((await legacyResponse.json()) as { content: string }).content
+      : "# Codex Workspace\n\n";
+    await fetch(
+      `/api/books/${bookId}/files/${encodeURIComponentPath(WORKSPACE_PATH)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: initial }),
+      },
+    );
+    setWorkspace(initial);
+    setWorkspaceStatus(
+      legacyResponse.ok
+        ? `${WORKSPACE_PATH} created from legacy notes.`
+        : `${WORKSPACE_PATH} created.`,
+    );
   }, [bookId]);
 
   const listHistoryFiles = useCallback(async () => {
@@ -311,21 +333,20 @@ export function CodexWorkspace({
 
   const loadHistory = useCallback(async () => {
     setHistoryLoaded(false);
-    const savedPath = window.localStorage.getItem(codexHistoryKey(bookId)) ?? "";
+    const savedPath =
+      window.localStorage.getItem(codexHistoryKey(bookId)) ?? "";
     const existing = await listHistoryFiles();
     setHistoryItems(await loadHistorySummaries(existing));
     const path =
-      (savedPath && existing.includes(savedPath) ? savedPath : existing.at(-1)) ??
-      createHistoryPath();
+      (savedPath && existing.includes(savedPath)
+        ? savedPath
+        : existing.at(-1)) ?? createHistoryPath();
     setHistoryPath(path);
     window.localStorage.setItem(codexHistoryKey(bookId), path);
 
     const history = await readHistory(path);
     if (history?.messages.length) {
       setMessages(history.messages);
-      setHistoryStatus(`History loaded from ${path}.`);
-    } else {
-      setHistoryStatus(`History ready at ${path}.`);
     }
     setHistoryLoaded(true);
   }, [bookId, listHistoryFiles, loadHistorySummaries, readHistory]);
@@ -352,8 +373,9 @@ export function CodexWorkspace({
           }),
         },
       );
-      setHistoryStatus(`History saved to ${historyPath}.`);
-      setHistoryItems((current) => upsertHistorySummary(current, historyPath, history));
+      setHistoryItems((current) =>
+        upsertHistorySummary(current, historyPath, history),
+      );
     },
     [bookId, historyPath],
   );
@@ -387,15 +409,18 @@ export function CodexWorkspace({
   }, [bookId, sourceAccessedAt]);
 
   useEffect(() => {
-    window.localStorage.setItem(codexInstructionsKey(bookId), codexInstructions);
+    window.localStorage.setItem(
+      codexInstructionsKey(bookId),
+      codexInstructions,
+    );
   }, [bookId, codexInstructions]);
 
   useEffect(() => {
     if (!bookId) return;
     void loadHistory();
-    void loadNotes();
+    void loadWorkspace();
     void loadCodex();
-  }, [bookId, loadCodex, loadHistory, loadNotes]);
+  }, [bookId, loadCodex, loadHistory, loadWorkspace]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -413,7 +438,7 @@ export function CodexWorkspace({
   useEffect(() => {
     if (!seed) return;
     selectSource(seed.sourcePath, true);
-    setNotes((value) => {
+    setWorkspace((value) => {
       const entry = [
         value.trimEnd(),
         "",
@@ -431,17 +456,20 @@ export function CodexWorkspace({
       return entry.trimStart();
     });
     appendCodexMessage(
-      `Study sent an excerpt from ${sourceLabel(seed.sourcePath)}. I staged it in the Markdown notes with provenance.`,
+      `Study sent an excerpt from ${sourceLabel(seed.sourcePath)}. I staged it in the Markdown workspace with provenance.`,
     );
   }, [seed]);
 
-  async function saveNotes() {
-    await fetch(`/api/books/${bookId}/files/${encodeURIComponentPath(NOTES_PATH)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ content: notes }),
-    });
-    setNotesStatus(`${NOTES_PATH} saved.`);
+  async function saveWorkspace() {
+    await fetch(
+      `/api/books/${bookId}/files/${encodeURIComponentPath(WORKSPACE_PATH)}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: workspace }),
+      },
+    );
+    setWorkspaceStatus(`${WORKSPACE_PATH} saved.`);
   }
 
   async function copyMessage(message: CodexMessage) {
@@ -465,7 +493,6 @@ export function CodexWorkspace({
     window.localStorage.setItem(codexHistoryKey(bookId), path);
     setMessages(history.messages);
     setHistoryLoaded(true);
-    setHistoryStatus(`History loaded from ${path}.`);
     setHistoryView("chat");
   }
 
@@ -495,7 +522,10 @@ export function CodexWorkspace({
     );
   }
 
-  async function sendMessage(message?: { content: string; displayContent?: string }) {
+  async function sendMessage(message?: {
+    content: string;
+    displayContent?: string;
+  }) {
     const content = (message?.content ?? input).trim();
     if (!content) return;
     const displayContent = (message?.displayContent ?? content).trim();
@@ -559,7 +589,7 @@ export function CodexWorkspace({
     const label =
       activeMagicAction === "search-sources"
         ? `${action?.title ?? "Search in sources"}: ${magicQuery || "all sources"}`
-        : `${action?.title ?? "Codex magic"} (${sectionsForPrompt.length || "all"} section${sectionsForPrompt.length === 1 ? "" : "s"})`;
+        : `${action?.title ?? "Codex magic"} (${magicSectionLabel(sectionsForPrompt, sectionTitlesByPath)})`;
     setActiveMagicAction(null);
     await sendMessage({ content: prompt, displayContent: `Magic: ${label}` });
   }
@@ -613,34 +643,36 @@ export function CodexWorkspace({
         "- /backlinks <path-or-concept>",
         "- /source-links <source-path>",
         "- /append-note <markdown>",
+        "- /append-workspace <markdown>",
         "- /source-note <markdown>",
         "- /search-project <query>",
         "- /read <project-file-path>",
         "- /examine-section <section-path>",
+        "- /commit-workspace",
         "- /commit-notes",
         "- /open-source <source-path>",
         "- /open-chapter <chapter-path>",
         "",
         "Any other message is sent through the local Codex CLI proxy.",
-        "I can read project files, including manuscript sections and sources. My writes are limited to the Codex Markdown notes shown in the center panel.",
+        "I can read project files, including manuscript sections and sources. My writes are limited to the Codex Markdown workspace shown in the center panel.",
       ].join("\n");
     }
-    if (command === "/append-note") {
-      if (!value) return "Give me Markdown to append to the center notes.";
-      appendToNotes(`\n\n${value}\n`);
-      return "I appended that Markdown to the Codex notes in the center panel.";
+    if (command === "/append-note" || command === "/append-workspace") {
+      if (!value) return "Give me Markdown to append to the center workspace.";
+      appendToWorkspace(`\n\n${value}\n`);
+      return "I appended that Markdown to the Codex workspace in the center panel.";
     }
     if (command === "/source-note") {
       if (!value) return "Give me text to attach to the active source.";
       const sourceLine = selectedSources.length
         ? `Sources: ${selectedSources.join(", ")}`
         : "Source: unsourced";
-      appendToNotes(`\n\n## Codex note\n\n${sourceLine}\n\n${value}\n`);
+      appendToWorkspace(`\n\n## Codex note\n\n${sourceLine}\n\n${value}\n`);
       return "I added a source-aware note to the center Markdown file.";
     }
-    if (command === "/commit-notes") {
-      await saveNotes();
-      return `Committed the center Markdown notes to ${NOTES_PATH}.`;
+    if (command === "/commit-workspace" || command === "/commit-notes") {
+      await saveWorkspace();
+      return `Committed the center Markdown workspace to ${WORKSPACE_PATH}.`;
     }
     if (command === "/search-project") {
       if (!value) return "Give me a project search query.";
@@ -650,7 +682,9 @@ export function CodexWorkspace({
         `Project search for "${value}":`,
         ...results
           .slice(0, 8)
-          .map((result) => `- ${result.path} (${result.score}): ${result.snippet}`),
+          .map(
+            (result) => `- ${result.path} (${result.score}): ${result.snippet}`,
+          ),
       ].join("\n");
     }
     if (command === "/read" || command === "/examine-section") {
@@ -677,7 +711,7 @@ export function CodexWorkspace({
       },
       body: JSON.stringify({
         message,
-        notes,
+        workspace,
         selectedSources,
         instructions: codexInstructions,
         history: messagesRef.current.map((entry) => ({
@@ -687,9 +721,9 @@ export function CodexWorkspace({
       } satisfies CodexCliRequest),
     });
     if (!response.ok || !response.body) {
-      const result = (await response.json().catch(() => null)) as
-        | CodexCliResponse
-        | null;
+      const result = (await response
+        .json()
+        .catch(() => null)) as CodexCliResponse | null;
       return result?.error ?? "Codex CLI proxy failed.";
     }
     return readCodexStream(response.body, messageId);
@@ -704,7 +738,8 @@ export function CodexWorkspace({
     let buffer = "";
     let streamed = "";
     let finalOutput = "";
-    let notesAppend = "";
+    let workspaceAppend = "";
+    let workspaceReplace = "";
 
     const consume = (chunk: string) => {
       buffer += chunk;
@@ -731,7 +766,8 @@ export function CodexWorkspace({
         if (event.name === "done") {
           const data = event.data as CodexCliResponse;
           finalOutput = data.output?.trim() ?? streamed.trim();
-          notesAppend = data.notesAppend ?? "";
+          workspaceAppend = data.workspaceAppend ?? data.notesAppend ?? "";
+          workspaceReplace = data.workspaceReplace ?? "";
           updateStreamingMessage(
             messageId,
             finalOutput || streamed.trim() || "Codex finished.",
@@ -752,16 +788,17 @@ export function CodexWorkspace({
     }
     consume(decoder.decode());
 
-    if (notesAppend) appendToNotes(`\n\n${notesAppend}\n`);
-    return finalOutput || streamed.trim() || "Codex CLI returned no visible output.";
+    if (workspaceReplace) replaceWorkspace(workspaceReplace);
+    else if (workspaceAppend) appendToWorkspace(`\n\n${workspaceAppend}\n`);
+    return (
+      finalOutput || streamed.trim() || "Codex CLI returned no visible output."
+    );
   }
 
   function updateStreamingMessage(messageId: string, content: string) {
     setMessages((current) =>
       current.map((message) =>
-        message.id === messageId
-          ? { ...message, content }
-          : message,
+        message.id === messageId ? { ...message, content } : message,
       ),
     );
   }
@@ -792,9 +829,14 @@ export function CodexWorkspace({
     return (await response.json()) as StudySearchSummary;
   }
 
-  function appendToNotes(markdown: string) {
-    setNotes((current) => `${current.trimEnd()}${markdown}`);
-    setNotesStatus(`${NOTES_PATH} edited by Codex.`);
+  function appendToWorkspace(markdown: string) {
+    setWorkspace((current) => `${current.trimEnd()}${markdown}`);
+    setWorkspaceStatus(`${WORKSPACE_PATH} edited by Codex.`);
+  }
+
+  function replaceWorkspace(markdown: string) {
+    setWorkspace(`${markdown.trimEnd()}\n`);
+    setWorkspaceStatus(`${WORKSPACE_PATH} updated by Codex.`);
   }
 
   function appendCodexMessage(content: string) {
@@ -850,8 +892,9 @@ export function CodexWorkspace({
               <header>
                 <Sparkles size={15} />
                 <strong>
-                  {MAGIC_ACTIONS.find((action) => action.id === activeMagicAction)
-                    ?.title ?? "Codex magic"}
+                  {MAGIC_ACTIONS.find(
+                    (action) => action.id === activeMagicAction,
+                  )?.title ?? "Codex magic"}
                 </strong>
               </header>
               {activeMagicAction === "search-sources" ? (
@@ -914,14 +957,17 @@ export function CodexWorkspace({
                       <span>
                         {activeMagicAction === "search-sources"
                           ? sourceLabel(path)
-                          : path}
+                          : (sectionTitlesByPath.get(path) ?? path)}
                       </span>
                     </label>
                   );
                 })}
               </div>
               <div className="codex-magic-actions">
-                <button type="button" onClick={() => setActiveMagicAction(null)}>
+                <button
+                  type="button"
+                  onClick={() => setActiveMagicAction(null)}
+                >
                   Cancel
                 </button>
                 <button
@@ -940,7 +986,10 @@ export function CodexWorkspace({
           ) : null}
           <div className="codex-active-scope">
             <p className="eyebrow">Active Scope</p>
-            <p>{selectedSources.length || "No"} sources selected for ad hoc commands.</p>
+            <p>
+              {selectedSources.length || "No"} sources selected for ad hoc
+              commands.
+            </p>
           </div>
           <div className="codex-source-list compact">
             {selectedSources.map((source) => (
@@ -978,30 +1027,33 @@ export function CodexWorkspace({
         onPointerDown={(event) => startCodexPaneResize("left", event)}
       />
 
-      <section className="codex-notes-panel">
+      <section className="codex-workspace-panel">
         <header>
           <div>
-            <p className="eyebrow">Markdown Notes</p>
-            <h1>{NOTES_PATH}</h1>
-            <p>{notesStatus}</p>
+            <p className="eyebrow">Markdown Workspace</p>
+            <h1>{WORKSPACE_PATH}</h1>
+            <p>{workspaceStatus}</p>
           </div>
           <div>
             {selectedSources.length === 1 ? (
-              <button type="button" onClick={() => onOpenSource(selectedSources[0])}>
+              <button
+                type="button"
+                onClick={() => onOpenSource(selectedSources[0])}
+              >
                 <BookOpen size={15} /> Open Source
               </button>
             ) : null}
-            <button type="button" onClick={() => void saveNotes()}>
+            <button type="button" onClick={() => void saveWorkspace()}>
               <Save size={15} /> Save
             </button>
           </div>
         </header>
         <textarea
-          aria-label="Codex Markdown notes"
-          value={notes}
+          aria-label="Codex Markdown workspace"
+          value={workspace}
           onChange={(event) => {
-            setNotes(event.target.value);
-            setNotesStatus(`${NOTES_PATH} edited.`);
+            setWorkspace(event.target.value);
+            setWorkspaceStatus(`${WORKSPACE_PATH} edited.`);
           }}
           spellCheck
         />
@@ -1038,16 +1090,9 @@ export function CodexWorkspace({
               <h2>{historyView === "history" ? "History" : "Panel"}</h2>
             </div>
           </div>
-          {historyView === "chat" ? (
-            <>
-              <p>{response?.cards.length ?? 0} committed cards indexed.</p>
-              <p>{selectedSources.length || "No"} active source selections.</p>
-              <p>{historyStatus}</p>
-              <p>Proxy: local Codex CLI. Read access: project files. Write access: {NOTES_PATH} only.</p>
-            </>
-          ) : (
+          {historyView === "history" ? (
             <p>Saved conversations from {HISTORY_ROOT}.</p>
-          )}
+          ) : null}
         </header>
         {historyView === "history" ? (
           <div className="codex-history-list">
@@ -1077,7 +1122,13 @@ export function CodexWorkspace({
                   key={message.id}
                   className={`codex-message ${message.role} ${message.status ?? ""}`}
                 >
-                  <span>{message.role === "user" ? <User size={14} /> : <Bot size={14} />}</span>
+                  <span>
+                    {message.role === "user" ? (
+                      <User size={14} />
+                    ) : (
+                      <Bot size={14} />
+                    )}
+                  </span>
                   <div className="codex-message-body">
                     <button
                       type="button"
@@ -1131,7 +1182,7 @@ function summarizeRelated(query: string, result: CodexResponse) {
   const cards = result.related.cards;
   const relationships = result.related.relationships;
   if (!cards.length && !relationships.length) {
-    return `No committed Codex relationships for ${query || "that query"} yet. Keep taking Markdown notes, then promote durable links when ready.`;
+    return `No committed Codex relationships for ${query || "that query"} yet. Keep taking Markdown workspace, then promote durable links when ready.`;
   }
   return [
     `Related to ${query || "current Codex scope"}:`,
@@ -1153,13 +1204,15 @@ function summarizeStudySearch(query: string, result: StudySearchSummary) {
     coverage
       ? `${coverage.matches} matches across ${coverage.chunks} indexed chunks (${coverage.exactMatches} exact, ${coverage.lexicalMatches} lexical).`
       : "",
-    ...result.directReferences.slice(0, 6).map((reference, index) =>
-      [
-        "",
-        `${index + 1}. ${reference.sourceFile}${reference.page ? ` p. ${reference.page}` : ""} (${reference.confidence}, ${reference.retrievalMethod})`,
-        `> ${reference.quote}`,
-      ].join("\n"),
-    ),
+    ...result.directReferences
+      .slice(0, 6)
+      .map((reference, index) =>
+        [
+          "",
+          `${index + 1}. ${reference.sourceFile}${reference.page ? ` p. ${reference.page}` : ""} (${reference.confidence}, ${reference.retrievalMethod})`,
+          `> ${reference.quote}`,
+        ].join("\n"),
+      ),
   ]
     .filter(Boolean)
     .join("\n");
@@ -1178,6 +1231,12 @@ function sourceLabel(path: string) {
     : path.replace(/^sources\//, "");
 }
 
+function magicSectionLabel(paths: string[], titlesByPath: Map<string, string>) {
+  if (!paths.length) return "all sections";
+  if (paths.length === 1) return titlesByPath.get(paths[0]) ?? paths[0];
+  return `${paths.length} sections`;
+}
+
 function codexSourceAccessKey(bookId: string) {
   return `essai:${bookId}:codex-source-access`;
 }
@@ -1193,7 +1252,8 @@ function codexHistoryKey(bookId: string) {
 function codexStatusText(status: string) {
   if (status === "connected") return "Codex bridge connected.";
   if (status === "queued") return "Codex turn queued on the warm CLI bridge.";
-  if (status === "started") return "Codex started. Waiting for the first token.";
+  if (status === "started")
+    return "Codex started. Waiting for the first token.";
   return `Codex ${status}.`;
 }
 
@@ -1205,10 +1265,17 @@ function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function readStoredNumber(key: string, fallback: number) {
+function readStoredNumber(
+  key: string,
+  fallback: number,
+  min = Number.NEGATIVE_INFINITY,
+  max = Number.POSITIVE_INFINITY,
+) {
   if (typeof window === "undefined") return fallback;
-  const value = Number(window.localStorage.getItem(key));
-  return Number.isFinite(value) ? value : fallback;
+  const stored = window.localStorage.getItem(key);
+  if (stored === null) return fallback;
+  const value = Number(stored);
+  return Number.isFinite(value) ? clamp(value, min, max) : fallback;
 }
 
 function startHorizontalDrag(
@@ -1239,7 +1306,10 @@ function createHistoryPath() {
 }
 
 function historyPathTimestamp(path: string) {
-  const stamp = path.split("/").at(-1)?.replace(/\.json$/, "");
+  const stamp = path
+    .split("/")
+    .at(-1)
+    ?.replace(/\.json$/, "");
   if (!stamp) return null;
   const iso = stamp.replace(
     /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/,
@@ -1267,7 +1337,9 @@ function summarizeHistory(
   path: string,
   history: CodexHistoryFile,
 ): CodexHistorySummary {
-  const firstUserMessage = history.messages.find((message) => message.role === "user");
+  const firstUserMessage = history.messages.find(
+    (message) => message.role === "user",
+  );
   const firstCodexMessage = history.messages.find(
     (message) => message.role === "codex",
   );
@@ -1295,7 +1367,12 @@ function upsertHistorySummary(
 }
 
 function historyTitle(item: CodexHistorySummary) {
-  return item.path.split("/").at(-1)?.replace(/\.json$/, "") ?? item.path;
+  return (
+    item.path
+      .split("/")
+      .at(-1)
+      ?.replace(/\.json$/, "") ?? item.path
+  );
 }
 
 function formatHistoryDate(value: string) {

@@ -33,7 +33,11 @@ import { MarkdownView } from "@/components/reading/markdown-view";
 import { PdfStudyReader } from "@/components/reading/pdf-study-reader";
 import type { AiSuggestion } from "@/lib/ai/types";
 import { expandSlashCommand, slashSnippets } from "@/lib/editor/slash";
-import type { BookMetadata, ManuscriptSection } from "@/lib/projects/templates";
+import {
+  slugifyBookId,
+  type BookMetadata,
+  type ManuscriptSection,
+} from "@/lib/projects/templates";
 import type { FileNode } from "@/lib/storage/types";
 
 const MarkdownEditor = dynamic(
@@ -139,7 +143,13 @@ export function EssaiApp({
     initialBookId ?? initialBooks[0]?.id ?? "",
   );
   const [files, setFiles] = useState<FileNode[]>([]);
-  const [openPath, setOpenPath] = useState("main.md");
+  const [openPath, setOpenPath] = useState(() =>
+    firstSectionPath(
+      initialBooks.find(
+        (book) => book.id === (initialBookId ?? initialBooks[0]?.id),
+      ),
+    ),
+  );
   const [draft, setDraft] = useState("");
   const [, setSaveState] = useState<SaveState>("saved");
   const [viewMode, setViewMode] = useState<ViewMode>("write");
@@ -181,7 +191,8 @@ export function EssaiApp({
   const manuscriptSections = activeBook?.sections?.length
     ? activeBook.sections
     : [{ id: "main", title: "Main", path: "main.md" }];
-  const appLeftWidth = viewMode === "study" ? studyLeftPaneWidth : leftPaneWidth;
+  const appLeftWidth =
+    viewMode === "study" ? studyLeftPaneWidth : leftPaneWidth;
 
   const loadBooks = useCallback(async () => {
     const response = await fetch("/api/books");
@@ -215,22 +226,25 @@ export function EssaiApp({
     [bookId],
   );
 
-  const saveFile = useCallback(async (contentOverride?: string) => {
-    if (!bookId || !openPath) return;
-    const content = contentOverride ?? draft;
-    setSaveState("saving");
-    setDraft(content);
-    await fetch(
-      `/api/books/${bookId}/files/${encodeURIComponentPath(openPath)}`,
-      {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content }),
-      },
-    );
-    await loadFile(openPath);
-    setSaveState("saved");
-  }, [bookId, draft, loadFile, openPath]);
+  const saveFile = useCallback(
+    async (contentOverride?: string) => {
+      if (!bookId || !openPath) return;
+      const content = contentOverride ?? draft;
+      setSaveState("saving");
+      setDraft(content);
+      await fetch(
+        `/api/books/${bookId}/files/${encodeURIComponentPath(openPath)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content }),
+        },
+      );
+      await loadFile(openPath);
+      setSaveState("saved");
+    },
+    [bookId, draft, loadFile, openPath],
+  );
 
   useEffect(() => {
     if (!books.length) return;
@@ -243,10 +257,14 @@ export function EssaiApp({
   }, [bookId, loadFiles, loadFile, openPath]);
 
   useEffect(() => {
-    setLeftPaneWidth(readStoredNumber("essai:pane:left", 238));
-    setRightPaneWidth(readStoredNumber("essai:pane:right", 258));
-    setStudyLeftPaneWidth(readStoredNumber("essai:pane:study-left", 268));
-    setSplitEditorPercent(readStoredNumber("essai:pane:split-editor", 50));
+    setLeftPaneWidth(readStoredNumber("essai:pane:left", 238, 180, 460));
+    setRightPaneWidth(readStoredNumber("essai:pane:right", 258, 210, 520));
+    setStudyLeftPaneWidth(
+      readStoredNumber("essai:pane:study-left", 268, 180, 460),
+    );
+    setSplitEditorPercent(
+      readStoredNumber("essai:pane:split-editor", 50, 28, 72),
+    );
   }, []);
 
   useEffect(() => {
@@ -258,7 +276,10 @@ export function EssaiApp({
   }, [rightPaneWidth]);
 
   useEffect(() => {
-    window.localStorage.setItem("essai:pane:study-left", String(studyLeftPaneWidth));
+    window.localStorage.setItem(
+      "essai:pane:study-left",
+      String(studyLeftPaneWidth),
+    );
   }, [studyLeftPaneWidth]);
 
   useEffect(() => {
@@ -476,7 +497,7 @@ export function EssaiApp({
     const book = (await response.json()) as BookMetadata;
     await loadBooks();
     setBookId(book.id);
-    setOpenPath("main.md");
+    setOpenPath(firstSectionPath(book));
     router.push(`/projects/${book.id}`);
   }
 
@@ -638,9 +659,44 @@ export function EssaiApp({
     if (result) updateManuscriptSections(result);
   }
 
-  function renameManuscriptSection(sectionId: string, title: string) {
-    const result = renameSectionTitle(manuscriptSections, sectionId, title);
-    if (result) updateManuscriptSections(result);
+  async function renameManuscriptSection(sectionId: string, title: string) {
+    const section = findSectionById(manuscriptSections, sectionId);
+    if (!section || !bookId) return;
+    const nextPath = uniqueSectionPath(
+      sectionPathForTitle(title, section.path),
+      section.path,
+      allFiles.map((file) => cleanProjectPath(file.path, bookId)),
+    );
+    if (openPath === section.path) {
+      await saveFile(draft);
+    }
+    if (nextPath !== section.path) {
+      const response = await fetch(
+        `/api/books/${bookId}/files/${encodeURIComponentPath(section.path)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ newPath: nextPath }),
+        },
+      );
+      if (!response.ok) {
+        setCaptureStatus("Section file rename failed.");
+        window.setTimeout(() => setCaptureStatus(""), 1800);
+        return;
+      }
+    }
+    const result = renameSection(
+      manuscriptSections,
+      sectionId,
+      title,
+      nextPath,
+    );
+    if (!result) return;
+    await updateManuscriptSections(result);
+    await loadFiles();
+    if (openPath === section.path) {
+      await loadFile(nextPath);
+    }
   }
 
   async function askAi(kind: string) {
@@ -785,9 +841,13 @@ export function EssaiApp({
                 <select
                   value={bookId}
                   onChange={(event) => {
-                    setBookId(event.target.value);
-                    setOpenPath("main.md");
-                    router.push(`/projects/${event.target.value}`);
+                    const nextBookId = event.target.value;
+                    const nextBook = books.find(
+                      (book) => book.id === nextBookId,
+                    );
+                    setBookId(nextBookId);
+                    setOpenPath(firstSectionPath(nextBook));
+                    router.push(`/projects/${nextBookId}`);
                   }}
                 >
                   {books.map((book) => (
@@ -1074,7 +1134,7 @@ export function EssaiApp({
                 ? "Sources"
                 : viewMode === "codex"
                   ? "Scope"
-                : "Sections"
+                  : "Sections"
           }
           onClose={() => setMobilePanel(null)}
         >
@@ -2098,14 +2158,25 @@ function encodeURIComponentPath(path: string) {
   return path.split("/").map(encodeURIComponent).join("/");
 }
 
+function firstSectionPath(book?: BookMetadata) {
+  return book?.sections?.[0]?.path ?? "main.md";
+}
+
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
 }
 
-function readStoredNumber(key: string, fallback: number) {
+function readStoredNumber(
+  key: string,
+  fallback: number,
+  min = Number.NEGATIVE_INFINITY,
+  max = Number.POSITIVE_INFINITY,
+) {
   if (typeof window === "undefined") return fallback;
-  const value = Number(window.localStorage.getItem(key));
-  return Number.isFinite(value) ? value : fallback;
+  const stored = window.localStorage.getItem(key);
+  if (stored === null) return fallback;
+  const value = Number(stored);
+  return Number.isFinite(value) ? clamp(value, min, max) : fallback;
 }
 
 function startHorizontalDrag(
@@ -2175,21 +2246,35 @@ function moveSectionBefore(
   return inserted ?? sections;
 }
 
-function renameSectionTitle(
+function findSectionById(
+  sections: ManuscriptSection[],
+  sectionId: string,
+): ManuscriptSection | null {
+  for (const section of sections) {
+    if (section.id === sectionId) return section;
+    const child = findSectionById(section.children ?? [], sectionId);
+    if (child) return child;
+  }
+  return null;
+}
+
+function renameSection(
   sections: ManuscriptSection[],
   sectionId: string,
   title: string,
+  path: string,
 ): ManuscriptSection[] | null {
   let renamed = false;
   const next = sections.map((section) => {
     if (section.id === sectionId) {
       renamed = true;
-      return { ...section, title };
+      return { ...section, title, path };
     }
-    const children = renameSectionTitle(
+    const children = renameSection(
       section.children ?? [],
       sectionId,
       title,
+      path,
     );
     if (children) {
       renamed = true;
@@ -2198,6 +2283,36 @@ function renameSectionTitle(
     return section;
   });
   return renamed ? next : null;
+}
+
+function sectionPathForTitle(title: string, currentPath: string) {
+  const fileName = `${slugifyBookId(title)}.md`;
+  const folder = currentPath.includes("/")
+    ? currentPath.split("/").slice(0, -1).join("/")
+    : "";
+  return folder ? `${folder}/${fileName}` : fileName;
+}
+
+function uniqueSectionPath(
+  preferredPath: string,
+  currentPath: string,
+  existingPaths: string[],
+) {
+  const existing = new Set(
+    existingPaths.filter((path) => path !== currentPath),
+  );
+  if (!existing.has(preferredPath)) return preferredPath;
+  const extension = preferredPath.endsWith(".md") ? ".md" : "";
+  const stem = extension
+    ? preferredPath.slice(0, -extension.length)
+    : preferredPath;
+  let suffix = 2;
+  let candidate = `${stem}-${suffix}${extension}`;
+  while (existing.has(candidate)) {
+    suffix += 1;
+    candidate = `${stem}-${suffix}${extension}`;
+  }
+  return candidate;
 }
 
 function removeSection(

@@ -109,12 +109,14 @@ button {
 .pane-resizer {
   position: relative;
   z-index: 8;
+  display: block;
   width: 6px;
   min-width: 6px;
   height: 100%;
   border: 0;
   border-radius: 0;
   background: transparent;
+  padding: 0;
   cursor: col-resize;
   touch-action: none;
 }
@@ -462,6 +464,14 @@ summary {
 
 .workspace > * + *:not(.pane-resizer) {
   border-left: 1px solid var(--rule);
+}
+
+.workspace .cm-content {
+  flex: 0 1 min(920px, 100%);
+  width: min(920px, 100%);
+  max-width: calc(100% - 32px);
+  margin: 0 auto;
+  padding: 52px 0;
 }
 
 .preview-shell {
@@ -1574,7 +1584,7 @@ summary {
 
 .codex-source-panel header p:not(.eyebrow),
 .codex-chat-panel header p:not(.eyebrow),
-.codex-notes-panel header p {
+.codex-workspace-panel header p {
   color: var(--muted);
   font-size: 12px;
   line-height: 1.45;
@@ -1811,14 +1821,14 @@ summary {
   text-transform: uppercase;
 }
 
-.codex-notes-panel {
+.codex-workspace-panel {
   min-height: 0;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   background: var(--surface);
 }
 
-.codex-notes-panel > header {
+.codex-workspace-panel > header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1828,7 +1838,7 @@ summary {
   background: color-mix(in srgb, var(--surface) 94%, var(--paper));
 }
 
-.codex-notes-panel h1 {
+.codex-workspace-panel h1 {
   margin: 0;
   font-family: var(--font-serif), Georgia, serif;
   font-size: 28px;
@@ -1836,14 +1846,14 @@ summary {
   font-weight: 560;
 }
 
-.codex-notes-panel > header > div:last-child {
+.codex-workspace-panel > header > div:last-child {
   display: flex;
   flex-wrap: wrap;
   justify-content: end;
   gap: 8px;
 }
 
-.codex-notes-panel > textarea {
+.codex-workspace-panel > textarea {
   width: 100%;
   min-height: 0;
   resize: vertical;
@@ -1867,7 +1877,7 @@ summary {
   grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 10px;
-  margin-bottom: 8px;
+  margin-bottom: 0;
 }
 
 .codex-chat-title-row > button {
@@ -2317,10 +2327,10 @@ summary {
   }
 
   .app-frame.study-active {
-    grid-template-columns: min(230px, var(--app-study-left-width, 230px)) 6px minmax(
-        0,
-        1fr
-      );
+    grid-template-columns: min(
+        230px,
+        var(--app-study-left-width, 230px)
+      ) 6px minmax(0, 1fr);
   }
 
   .codex-workspace {
@@ -2470,12 +2480,12 @@ summary {
     display: none;
   }
 
-  .codex-notes-panel > header {
+  .codex-workspace-panel > header {
     align-items: start;
     display: grid;
   }
 
-  .codex-notes-panel > textarea {
+  .codex-workspace-panel > textarea {
     padding: 20px 16px 96px;
     font-size: 17px;
   }

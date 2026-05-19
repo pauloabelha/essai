@@ -23,7 +23,7 @@ interface ThreadState {
 export interface CodexBridgeTurnInput {
   projectRoot: string;
   message: string;
-  notes: string;
+  workspace: string;
   selectedSources: string[];
   instructions: string;
   history: Array<{ role: string; content: string }>;
@@ -32,7 +32,8 @@ export interface CodexBridgeTurnInput {
 
 export interface CodexBridgeTurnOutput {
   output: string;
-  notesAppend: string;
+  workspaceAppend: string;
+  workspaceReplace: string;
 }
 
 export interface CodexBridgeTurnEvents {
@@ -99,8 +100,9 @@ class CodexAppServerBridge {
       events.onStarted?.();
       const output = await this.startTurn(thread.threadId, prompt, events);
       return {
-        output: stripNotesAppendBlocks(output).trim(),
-        notesAppend: extractNotesAppend(output),
+        output: stripWorkspaceBlocks(output).trim(),
+        workspaceAppend: extractWorkspaceAppend(output),
+        workspaceReplace: extractWorkspaceReplace(output),
       };
     };
 
@@ -130,7 +132,9 @@ class CodexAppServerBridge {
     this.process.stderr.on("data", () => {
       // Codex emits plugin and sandbox warnings on stderr during warmup.
     });
-    this.process.on("exit", () => this.reset(new Error("Codex app-server exited.")));
+    this.process.on("exit", () =>
+      this.reset(new Error("Codex app-server exited.")),
+    );
     this.process.on("error", (error) => this.reset(error));
 
     await this.request("initialize", {
@@ -175,7 +179,8 @@ class CodexAppServerBridge {
         "You may read the current Essai book folder to answer scholarly questions.",
         "Never edit manuscript section files, main.md, chapter files, or source ledgers.",
         "Do not run file-writing commands.",
-        "When asked to change Codex notes, return Markdown inside <codex-notes-append> tags.",
+        "When useful, you may update the center Codex workspace by returning Markdown in <codex-workspace-append> or <codex-workspace-replace> tags.",
+        "Only use workspace tags for the shared Codex Markdown workspace, never for manuscript prose.",
       ].join("\n"),
       developerInstructions:
         "Keep answers concise, source-grounded, and cite file paths you inspected.",
@@ -184,7 +189,8 @@ class CodexAppServerBridge {
     })) as { thread?: { id?: string } };
 
     const threadId = result.thread?.id;
-    if (!threadId) throw new Error("Codex app-server did not return a thread id.");
+    if (!threadId)
+      throw new Error("Codex app-server did not return a thread id.");
     const thread: ThreadState = {
       threadId,
       projectRoot,
@@ -236,7 +242,11 @@ class CodexAppServerBridge {
     });
   }
 
-  private request(method: string, params: unknown, timeoutMs = REQUEST_TIMEOUT_MS) {
+  private request(
+    method: string,
+    params: unknown,
+    timeoutMs = REQUEST_TIMEOUT_MS,
+  ) {
     if (!this.process?.stdin.writable) {
       return Promise.reject(new Error("Codex app-server is not running."));
     }
@@ -277,7 +287,9 @@ class CodexAppServerBridge {
       clearTimeout(pending.timer);
       this.pending.delete(message.id);
       if (message.error) {
-        pending.reject(new Error(message.error.message ?? "Codex request failed."));
+        pending.reject(
+          new Error(message.error.message ?? "Codex request failed."),
+        );
       } else {
         pending.resolve(message.result);
       }
@@ -292,7 +304,9 @@ class CodexAppServerBridge {
     if (!message.method || !message.params) return;
     if (message.method === "item/agentMessage/delta") {
       const params = message.params as { threadId?: string; delta?: string };
-      const turn = params.threadId ? this.activeTurns.get(params.threadId) : null;
+      const turn = params.threadId
+        ? this.activeTurns.get(params.threadId)
+        : null;
       if (turn) {
         const delta = params.delta ?? "";
         turn.output += delta;
@@ -302,7 +316,9 @@ class CodexAppServerBridge {
     }
     if (message.method === "item/completed") {
       const params = message.params as { threadId?: string; item?: unknown };
-      const turn = params.threadId ? this.activeTurns.get(params.threadId) : null;
+      const turn = params.threadId
+        ? this.activeTurns.get(params.threadId)
+        : null;
       const text = extractText(params.item);
       if (turn && text && !turn.output.includes(text)) {
         turn.output += text;
@@ -314,12 +330,16 @@ class CodexAppServerBridge {
         threadId?: string;
         turn?: { status?: string; error?: { message?: string } };
       };
-      const turn = params.threadId ? this.activeTurns.get(params.threadId) : null;
+      const turn = params.threadId
+        ? this.activeTurns.get(params.threadId)
+        : null;
       if (!params.threadId || !turn) return;
       clearTimeout(turn.timer);
       this.activeTurns.delete(params.threadId);
       if (params.turn?.status === "failed") {
-        turn.reject(new Error(params.turn.error?.message ?? "Codex turn failed."));
+        turn.reject(
+          new Error(params.turn.error?.message ?? "Codex turn failed."),
+        );
       } else {
         turn.resolve(turn.output.trim());
       }
@@ -331,7 +351,7 @@ export const codexBridge = new CodexAppServerBridge();
 
 function buildPrompt({
   message,
-  notes,
+  workspace,
   selectedSources,
   instructions,
   history,
@@ -347,11 +367,16 @@ function buildPrompt({
 Hard boundaries:
 - You may read manuscript sections, sources, concepts, objects, notes, and Codex files.
 - You must not edit manuscript section files or source ledgers.
-- If the user asks you to change Codex notes, return Markdown inside exactly:
-<codex-notes-append>
+- The center panel is a collaborative Markdown workspace at codex/workspace.md. The human can edit it directly.
+- If your answer should update that workspace, return one of these blocks:
+<codex-workspace-append>
 ...markdown to append...
-</codex-notes-append>
-- The web app will apply that append to codex/notes.md.
+</codex-workspace-append>
+<codex-workspace-replace>
+...complete revised workspace markdown...
+</codex-workspace-replace>
+- Prefer replace when reorganizing the workspace from the current contents; preserve the author's existing useful text.
+- The web app will apply those blocks only to codex/workspace.md.
 - Mention file paths you used.
 
 Persistent Codex instructions from the user:
@@ -363,8 +388,8 @@ ${selectedSources.length ? selectedSources.map((source) => `- ${source}`).join("
 Study retrieval context from Essai's indexed sources:
 ${studyContext?.trim() || "(no indexed Study passages were attached)"}
 
-Current center Codex notes:
-${notes.slice(0, 12000) || "(empty)"}
+Current center Codex workspace:
+${workspace.slice(0, 12000) || "(empty)"}
 
 Recent panel messages:
 ${compactHistory || "(none)"}
@@ -382,20 +407,36 @@ function extractText(item: unknown): string {
   };
   if (record.type !== "message" || !Array.isArray(record.content)) return "";
   return record.content
-    .map((content) => (content.type === "output_text" ? content.text ?? "" : ""))
+    .map((content) =>
+      content.type === "output_text" ? (content.text ?? "") : "",
+    )
     .join("");
 }
 
-function extractNotesAppend(output: string) {
+function extractWorkspaceAppend(output: string) {
   const match = output.match(
+    /<codex-workspace-append>\s*([\s\S]*?)\s*<\/codex-workspace-append>/,
+  );
+  if (match?.[1]) return match[1].trim();
+  const legacyMatch = output.match(
     /<codex-notes-append>\s*([\s\S]*?)\s*<\/codex-notes-append>/,
+  );
+  return legacyMatch?.[1]?.trim() ?? "";
+}
+
+function extractWorkspaceReplace(output: string) {
+  const match = output.match(
+    /<codex-workspace-replace>\s*([\s\S]*?)\s*<\/codex-workspace-replace>/,
   );
   return match?.[1]?.trim() ?? "";
 }
 
-function stripNotesAppendBlocks(output: string) {
-  return output.replace(
-    /<codex-notes-append>[\s\S]*?<\/codex-notes-append>/g,
-    "",
-  );
+function stripWorkspaceBlocks(output: string) {
+  return output
+    .replace(/<codex-workspace-append>[\s\S]*?<\/codex-workspace-append>/g, "")
+    .replace(
+      /<codex-workspace-replace>[\s\S]*?<\/codex-workspace-replace>/g,
+      "",
+    )
+    .replace(/<codex-notes-append>[\s\S]*?<\/codex-notes-append>/g, "");
 }
