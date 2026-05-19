@@ -1,5 +1,6 @@
 import path from "node:path";
 import { NextResponse } from "next/server";
+import { buildCodexFallbackResponse } from "@/lib/codex/fallback";
 import { codexBridge } from "@/lib/codex/cli-bridge";
 import { createLogger } from "@/lib/server/log";
 import { getServerStorage } from "@/lib/storage/server";
@@ -20,6 +21,8 @@ export async function POST(
   const body = (await request.json()) as {
     message?: string;
     workspace?: string;
+    workspacePath?: string;
+    workspaceTabs?: Array<{ path: string; title: string }>;
     notes?: string;
     selectedSource?: string;
     selectedSources?: string[];
@@ -48,18 +51,28 @@ export async function POST(
 
   try {
     const storage = getServerStorage();
-    const studyContext = formatStudyContext(
-      await buildStudyInvestigation(storage, bookId, {
-        query: studyQueryFromMessage(message),
-        exhaustive: false,
-        sourcePaths:
-          body.selectedSources ?? legacySelectedSources(body.selectedSource),
-      }),
-    );
+    const study = await buildStudyInvestigation(storage, bookId, {
+      query: studyQueryFromMessage(message),
+      exhaustive: false,
+      sourcePaths:
+        body.selectedSources ?? legacySelectedSources(body.selectedSource),
+    });
+    const studyContext = formatStudyContext(study);
+    const fallback = (error: unknown) =>
+      buildCodexFallbackResponse({
+        message,
+        study,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Codex app-server bridge failed.",
+      });
     const input = {
       projectRoot,
       message,
       workspace: body.workspace ?? body.notes ?? "",
+      workspacePath: body.workspacePath,
+      workspaceTabs: body.workspaceTabs,
       selectedSources:
         body.selectedSources ?? legacySelectedSources(body.selectedSource),
       instructions: body.instructions ?? "",
@@ -67,9 +80,15 @@ export async function POST(
       studyContext,
     };
     if (wantsStream(request)) {
-      return streamCodexTurn(input, request.signal);
+      return streamCodexTurn(input, request.signal, fallback);
     }
-    return NextResponse.json(await codexBridge.runTurn(input));
+    try {
+      return NextResponse.json(await codexBridge.runTurn(input));
+    } catch (error) {
+      const fallbackResponse = fallback(error);
+      if (fallbackResponse) return NextResponse.json(fallbackResponse);
+      throw error;
+    }
   } catch (error) {
     log.warn("codex app-server bridge failed", { bookId, error });
     return NextResponse.json(
@@ -137,6 +156,7 @@ function wantsStream(request: Request) {
 function streamCodexTurn(
   input: Parameters<typeof codexBridge.runTurn>[0],
   signal: AbortSignal,
+  fallback: (error: unknown) => ReturnType<typeof buildCodexFallbackResponse>,
 ) {
   const encoder = new TextEncoder();
   const stream = new ReadableStream({
@@ -188,12 +208,17 @@ function streamCodexTurn(
         })
         .catch((error) => {
           signal.removeEventListener("abort", abort);
-          send("error", {
-            error:
-              error instanceof Error
-                ? error.message
-                : "Codex app-server bridge failed.",
-          });
+          const fallbackResponse = fallback(error);
+          if (fallbackResponse) {
+            send("done", fallbackResponse);
+          } else {
+            send("error", {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Codex app-server bridge failed.",
+            });
+          }
           finish();
         });
     },

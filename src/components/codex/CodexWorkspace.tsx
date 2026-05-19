@@ -9,12 +9,14 @@ import {
   Check,
   Copy,
   FileText,
+  Plus,
   Search,
   Save,
   Send,
   ShieldCheck,
   Sparkles,
   Wand2,
+  X,
   User,
 } from "lucide-react";
 import type { ResearchCard as ResearchCardModel } from "@/lib/codex/cards";
@@ -89,23 +91,45 @@ interface CodexCliResponse {
   output?: string;
   workspaceAppend?: string;
   workspaceReplace?: string;
+  workspacePath?: string;
+  workspaceCreates?: WorkspaceCreate[];
   notesAppend?: string;
   error?: string;
+}
+
+interface WorkspaceTab {
+  path: string;
+  title: string;
+}
+
+interface WorkspaceCreate {
+  title?: string;
+  content: string;
 }
 
 interface CodexCliRequest {
   message: string;
   workspace: string;
+  workspacePath: string;
+  workspaceTabs: WorkspaceTab[];
   selectedSources: string[];
   instructions: string;
   history: Array<{ role: string; content: string }>;
 }
 
 const WORKSPACE_PATH = "codex/workspace.md";
+const WORKSPACE_TABS_ROOT = "codex/workspace-tabs";
 const LEGACY_NOTES_PATH = "codex/notes.md";
 const HISTORY_ROOT = "codex/history";
 const DEFAULT_CODEX_INSTRUCTIONS =
   "Read manuscript sections and sources freely, but never edit human-written section files. Keep workspace changes source-grounded and preserve human edits in the center Codex workspace.";
+const OPENING_MESSAGE: CodexMessage = {
+  id: "opening",
+  role: "codex",
+  content:
+    "Codex is ready. Use the center Markdown workspace for shared inquiry; ask for relationships, backlinks, claims, concepts, or source links.",
+  status: "done",
+};
 const MAGIC_ACTIONS: Array<{
   id: CodexMagicAction;
   title: string;
@@ -161,17 +185,14 @@ export function CodexWorkspace({
   const [magicSections, setMagicSections] = useState<string[]>([]);
   const [scopePaneWidth, setScopePaneWidth] = useState(310);
   const [chatPaneWidth, setChatPaneWidth] = useState(360);
+  const [workspaceTabs, setWorkspaceTabs] = useState<WorkspaceTab[]>([
+    { path: WORKSPACE_PATH, title: "Workspace" },
+  ]);
+  const [activeWorkspacePath, setActiveWorkspacePath] =
+    useState(WORKSPACE_PATH);
   const [workspace, setWorkspace] = useState("");
   const [workspaceStatus, setWorkspaceStatus] = useState("Loading workspace.");
-  const [messages, setMessages] = useState<CodexMessage[]>([
-    {
-      id: "opening",
-      role: "codex",
-      content:
-        "Codex is ready. Use the center Markdown workspace for shared inquiry; ask for relationships, backlinks, claims, concepts, or source links.",
-      status: "done",
-    },
-  ]);
+  const [messages, setMessages] = useState<CodexMessage[]>([OPENING_MESSAGE]);
   const [input, setInput] = useState("");
   const [copiedMessageId, setCopiedMessageId] = useState("");
   const [historyPath, setHistoryPath] = useState("");
@@ -251,38 +272,85 @@ export function CodexWorkspace({
     [bookId],
   );
 
-  const loadWorkspace = useCallback(async () => {
+  const loadWorkspaceTabs = useCallback(async () => {
     const response = await fetch(
       `/api/books/${bookId}/files/${encodeURIComponentPath(WORKSPACE_PATH)}`,
     );
+    let defaultContent = "";
     if (response.ok) {
       const file = (await response.json()) as { content: string };
-      setWorkspace(file.content);
-      setWorkspaceStatus(`${WORKSPACE_PATH} loaded.`);
-      return;
+      defaultContent = file.content;
+    } else {
+      const legacyResponse = await fetch(
+        `/api/books/${bookId}/files/${encodeURIComponentPath(LEGACY_NOTES_PATH)}`,
+      );
+      defaultContent = legacyResponse.ok
+        ? ((await legacyResponse.json()) as { content: string }).content
+        : "# Codex Workspace\n\n";
+      await fetch(
+        `/api/books/${bookId}/files/${encodeURIComponentPath(WORKSPACE_PATH)}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content: defaultContent }),
+        },
+      );
     }
 
-    const legacyResponse = await fetch(
-      `/api/books/${bookId}/files/${encodeURIComponentPath(LEGACY_NOTES_PATH)}`,
+    const filesResponse = await fetch(`/api/books/${bookId}/files`);
+    const nodes = filesResponse.ok
+      ? ((await filesResponse.json()) as FileNode[])
+      : [];
+    const extraPaths = flattenFileNodes(nodes)
+      .map((file) => cleanBookPath(file.path, bookId))
+      .filter(
+        (path) =>
+          path.startsWith(`${WORKSPACE_TABS_ROOT}/`) && path.endsWith(".md"),
+      )
+      .sort();
+    const extraTabs = await Promise.all(
+      extraPaths.map(async (path) => {
+        const tabResponse = await fetch(
+          `/api/books/${bookId}/files/${encodeURIComponentPath(path)}`,
+        );
+        const file = tabResponse.ok
+          ? ((await tabResponse.json()) as { content: string })
+          : { content: "" };
+        return { path, title: workspaceTitle(path, file.content) };
+      }),
     );
-    const initial = legacyResponse.ok
-      ? ((await legacyResponse.json()) as { content: string }).content
-      : "# Codex Workspace\n\n";
-    await fetch(
-      `/api/books/${bookId}/files/${encodeURIComponentPath(WORKSPACE_PATH)}`,
+    const tabs = [
       {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: initial }),
+        path: WORKSPACE_PATH,
+        title: workspaceTitle(WORKSPACE_PATH, defaultContent),
       },
-    );
-    setWorkspace(initial);
-    setWorkspaceStatus(
-      legacyResponse.ok
-        ? `${WORKSPACE_PATH} created from legacy notes.`
-        : `${WORKSPACE_PATH} created.`,
+      ...extraTabs,
+    ];
+    setWorkspaceTabs(tabs);
+    setActiveWorkspacePath((current) =>
+      tabs.some((tab) => tab.path === current) ? current : tabs[0].path,
     );
   }, [bookId]);
+
+  const loadWorkspace = useCallback(
+    async (path: string) => {
+      const response = await fetch(
+        `/api/books/${bookId}/files/${encodeURIComponentPath(path)}`,
+      );
+      if (!response.ok) return;
+      const file = (await response.json()) as { content: string };
+      setWorkspace(file.content);
+      setWorkspaceStatus(`${path} loaded.`);
+      setWorkspaceTabs((current) =>
+        current.map((tab) =>
+          tab.path === path
+            ? { ...tab, title: workspaceTitle(path, file.content) }
+            : tab,
+        ),
+      );
+    },
+    [bookId],
+  );
 
   const listHistoryFiles = useCallback(async () => {
     const response = await fetch(`/api/books/${bookId}/files`);
@@ -346,7 +414,7 @@ export function CodexWorkspace({
 
     const history = await readHistory(path);
     if (history?.messages.length) {
-      setMessages(history.messages);
+      setMessages(history.messages.map(normalizeHistoryMessage));
     }
     setHistoryLoaded(true);
   }, [bookId, listHistoryFiles, loadHistorySummaries, readHistory]);
@@ -358,10 +426,7 @@ export function CodexWorkspace({
         version: 1,
         createdAt: historyPathTimestamp(historyPath) ?? now,
         updatedAt: now,
-        messages: nextMessages.map((message) => ({
-          ...message,
-          status: message.status === "thinking" ? "done" : message.status,
-        })),
+        messages: nextMessages.map(persistableHistoryMessage),
       };
       await fetch(
         `/api/books/${bookId}/files/${encodeURIComponentPath(historyPath)}`,
@@ -418,9 +483,14 @@ export function CodexWorkspace({
   useEffect(() => {
     if (!bookId) return;
     void loadHistory();
-    void loadWorkspace();
+    void loadWorkspaceTabs();
     void loadCodex();
-  }, [bookId, loadCodex, loadHistory, loadWorkspace]);
+  }, [bookId, loadCodex, loadHistory, loadWorkspaceTabs]);
+
+  useEffect(() => {
+    if (!bookId || !activeWorkspacePath) return;
+    void loadWorkspace(activeWorkspacePath);
+  }, [activeWorkspacePath, bookId, loadWorkspace]);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -462,14 +532,85 @@ export function CodexWorkspace({
 
   async function saveWorkspace() {
     await fetch(
-      `/api/books/${bookId}/files/${encodeURIComponentPath(WORKSPACE_PATH)}`,
+      `/api/books/${bookId}/files/${encodeURIComponentPath(activeWorkspacePath)}`,
       {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content: workspace }),
       },
     );
-    setWorkspaceStatus(`${WORKSPACE_PATH} saved.`);
+    setWorkspaceStatus(`${activeWorkspacePath} saved.`);
+    setWorkspaceTabs((current) =>
+      current.map((tab) =>
+        tab.path === activeWorkspacePath
+          ? { ...tab, title: workspaceTitle(tab.path, workspace) }
+          : tab,
+      ),
+    );
+  }
+
+  async function createWorkspaceTab(title = "Codex note", content?: string) {
+    await writeWorkspaceContent(activeWorkspacePath, workspace);
+    const path = uniqueWorkspacePath(title, workspaceTabs);
+    const initial = content ?? `# ${title}\n\n`;
+    await fetch(`/api/books/${bookId}/files/${encodeURIComponentPath(path)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content: initial }),
+    });
+    const tab = { path, title: workspaceTitle(path, initial) };
+    const tabs = [...workspaceTabs, tab];
+    setWorkspaceTabs(tabs);
+    setActiveWorkspacePath(path);
+    setWorkspace(initial);
+    setWorkspaceStatus(`${path} created.`);
+    return { tab, tabs, content: initial };
+  }
+
+  async function deleteWorkspaceTab(path: string) {
+    if (workspaceTabs.length <= 1) return;
+    await fetch(`/api/books/${bookId}/files/${encodeURIComponentPath(path)}`, {
+      method: "DELETE",
+    });
+    const tabs = workspaceTabs.filter((tab) => tab.path !== path);
+    setWorkspaceTabs(tabs);
+    if (activeWorkspacePath === path) {
+      const next = tabs[0];
+      setActiveWorkspacePath(next.path);
+      await loadWorkspace(next.path);
+    }
+  }
+
+  async function switchWorkspaceTab(path: string) {
+    if (path === activeWorkspacePath) return;
+    await writeWorkspaceContent(activeWorkspacePath, workspace);
+    setActiveWorkspacePath(path);
+  }
+
+  async function readWorkspaceContent(path: string) {
+    const response = await fetch(
+      `/api/books/${bookId}/files/${encodeURIComponentPath(path)}`,
+    );
+    if (!response.ok) return "";
+    const file = (await response.json()) as { content: string };
+    return file.content;
+  }
+
+  async function writeWorkspaceContent(path: string, content: string) {
+    await fetch(`/api/books/${bookId}/files/${encodeURIComponentPath(path)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ content }),
+    });
+    setWorkspaceTabs((current) =>
+      current.some((tab) => tab.path === path)
+        ? current.map((tab) =>
+            tab.path === path
+              ? { ...tab, title: workspaceTitle(path, content) }
+              : tab,
+          )
+        : [...current, { path, title: workspaceTitle(path, content) }],
+    );
   }
 
   async function copyMessage(message: CodexMessage) {
@@ -491,7 +632,31 @@ export function CodexWorkspace({
     if (!history) return;
     setHistoryPath(path);
     window.localStorage.setItem(codexHistoryKey(bookId), path);
+    setMessages(history.messages.map(normalizeHistoryMessage));
+    setHistoryLoaded(true);
+    setHistoryView("chat");
+  }
+
+  async function createNewHistoryChat() {
+    const path = createHistoryPath();
+    const now = new Date().toISOString();
+    const history: CodexHistoryFile = {
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+      messages: [OPENING_MESSAGE],
+    };
+    await fetch(`/api/books/${bookId}/files/${encodeURIComponentPath(path)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: `${JSON.stringify(history, null, 2)}\n`,
+      }),
+    });
+    setHistoryPath(path);
+    window.localStorage.setItem(codexHistoryKey(bookId), path);
     setMessages(history.messages);
+    setHistoryItems((current) => upsertHistorySummary(current, path, history));
     setHistoryLoaded(true);
     setHistoryView("chat");
   }
@@ -525,6 +690,9 @@ export function CodexWorkspace({
   async function sendMessage(message?: {
     content: string;
     displayContent?: string;
+    workspacePath?: string;
+    workspaceContent?: string;
+    workspaceTabs?: WorkspaceTab[];
   }) {
     const content = (message?.content ?? input).trim();
     if (!content) return;
@@ -548,7 +716,11 @@ export function CodexWorkspace({
     ]);
 
     try {
-      const output = await codexReply(content, thinkingId);
+      const output = await codexReply(content, thinkingId, {
+        workspacePath: message?.workspacePath ?? activeWorkspacePath,
+        workspaceContent: message?.workspaceContent ?? workspace,
+        workspaceTabs: message?.workspaceTabs ?? workspaceTabs,
+      });
       setMessages((current) =>
         current.map((message) =>
           message.id === thinkingId
@@ -590,11 +762,32 @@ export function CodexWorkspace({
       activeMagicAction === "search-sources"
         ? `${action?.title ?? "Search in sources"}: ${magicQuery || "all sources"}`
         : `${action?.title ?? "Codex magic"} (${magicSectionLabel(sectionsForPrompt, sectionTitlesByPath)})`;
+    const tabTitle = magicWorkspaceTitle(
+      action?.title ?? "Codex magic",
+      isSourceSearch
+        ? magicQuery
+        : magicSectionLabel(sectionsForPrompt, sectionTitlesByPath),
+    );
+    const created = await createWorkspaceTab(tabTitle);
     setActiveMagicAction(null);
-    await sendMessage({ content: prompt, displayContent: `Magic: ${label}` });
+    await sendMessage({
+      content: prompt,
+      displayContent: `Magic: ${label}`,
+      workspacePath: created.tab.path,
+      workspaceContent: created.content,
+      workspaceTabs: created.tabs,
+    });
   }
 
-  async function codexReply(message: string, messageId: string) {
+  async function codexReply(
+    message: string,
+    messageId: string,
+    workspaceContext = {
+      workspacePath: activeWorkspacePath,
+      workspaceContent: workspace,
+      workspaceTabs,
+    },
+  ) {
     const [command, ...rest] = message.split(/\s+/);
     const value = rest.join(" ").trim();
     if (command === "/related") {
@@ -659,7 +852,7 @@ export function CodexWorkspace({
     }
     if (command === "/append-note" || command === "/append-workspace") {
       if (!value) return "Give me Markdown to append to the center workspace.";
-      appendToWorkspace(`\n\n${value}\n`);
+      await appendToWorkspace(`\n\n${value}\n`);
       return "I appended that Markdown to the Codex workspace in the center panel.";
     }
     if (command === "/source-note") {
@@ -667,7 +860,9 @@ export function CodexWorkspace({
       const sourceLine = selectedSources.length
         ? `Sources: ${selectedSources.join(", ")}`
         : "Source: unsourced";
-      appendToWorkspace(`\n\n## Codex note\n\n${sourceLine}\n\n${value}\n`);
+      await appendToWorkspace(
+        `\n\n## Codex note\n\n${sourceLine}\n\n${value}\n`,
+      );
       return "I added a source-aware note to the center Markdown file.";
     }
     if (command === "/commit-workspace" || command === "/commit-notes") {
@@ -699,10 +894,18 @@ export function CodexWorkspace({
       ].join("\n");
     }
 
-    return callCodexCli(message, messageId);
+    return callCodexCli(message, messageId, workspaceContext);
   }
 
-  async function callCodexCli(message: string, messageId: string) {
+  async function callCodexCli(
+    message: string,
+    messageId: string,
+    workspaceContext: {
+      workspacePath: string;
+      workspaceContent: string;
+      workspaceTabs: WorkspaceTab[];
+    },
+  ) {
     const response = await fetch(`/api/books/${bookId}/codex/cli?stream=1`, {
       method: "POST",
       headers: {
@@ -711,7 +914,9 @@ export function CodexWorkspace({
       },
       body: JSON.stringify({
         message,
-        workspace,
+        workspace: workspaceContext.workspaceContent,
+        workspacePath: workspaceContext.workspacePath,
+        workspaceTabs: workspaceContext.workspaceTabs,
         selectedSources,
         instructions: codexInstructions,
         history: messagesRef.current.map((entry) => ({
@@ -726,12 +931,17 @@ export function CodexWorkspace({
         .catch(() => null)) as CodexCliResponse | null;
       return result?.error ?? "Codex CLI proxy failed.";
     }
-    return readCodexStream(response.body, messageId);
+    return readCodexStream(response.body, messageId, workspaceContext);
   }
 
   async function readCodexStream(
     body: ReadableStream<Uint8Array>,
     messageId: string,
+    workspaceContext: {
+      workspacePath: string;
+      workspaceContent: string;
+      workspaceTabs: WorkspaceTab[];
+    },
   ) {
     const reader = body.getReader();
     const decoder = new TextDecoder();
@@ -740,6 +950,8 @@ export function CodexWorkspace({
     let finalOutput = "";
     let workspaceAppend = "";
     let workspaceReplace = "";
+    let workspacePathForWrite = workspaceContext.workspacePath;
+    let workspaceCreates: WorkspaceCreate[] = [];
 
     const consume = (chunk: string) => {
       buffer += chunk;
@@ -768,6 +980,8 @@ export function CodexWorkspace({
           finalOutput = data.output?.trim() ?? streamed.trim();
           workspaceAppend = data.workspaceAppend ?? data.notesAppend ?? "";
           workspaceReplace = data.workspaceReplace ?? "";
+          workspacePathForWrite = data.workspacePath || workspacePathForWrite;
+          workspaceCreates = data.workspaceCreates ?? [];
           updateStreamingMessage(
             messageId,
             finalOutput || streamed.trim() || "Codex finished.",
@@ -788,8 +1002,17 @@ export function CodexWorkspace({
     }
     consume(decoder.decode());
 
-    if (workspaceReplace) replaceWorkspace(workspaceReplace);
-    else if (workspaceAppend) appendToWorkspace(`\n\n${workspaceAppend}\n`);
+    for (const create of workspaceCreates) {
+      await createWorkspaceTab(create.title ?? "Codex note", create.content);
+    }
+    if (workspaceReplace) {
+      await replaceWorkspace(workspaceReplace, workspacePathForWrite);
+    } else if (workspaceAppend) {
+      await appendToWorkspace(
+        `\n\n${workspaceAppend}\n`,
+        workspacePathForWrite,
+      );
+    }
     return (
       finalOutput || streamed.trim() || "Codex CLI returned no visible output."
     );
@@ -829,14 +1052,37 @@ export function CodexWorkspace({
     return (await response.json()) as StudySearchSummary;
   }
 
-  function appendToWorkspace(markdown: string) {
-    setWorkspace((current) => `${current.trimEnd()}${markdown}`);
-    setWorkspaceStatus(`${WORKSPACE_PATH} edited by Codex.`);
+  async function appendToWorkspace(
+    markdown: string,
+    path = activeWorkspacePath,
+  ) {
+    if (path === activeWorkspacePath) {
+      setWorkspace((current) => `${current.trimEnd()}${markdown}`);
+      setWorkspaceStatus(`${path} edited by Codex.`);
+      return;
+    }
+    const current = await readWorkspaceContent(path);
+    const next = `${current.trimEnd()}${markdown}`;
+    await writeWorkspaceContent(path, next);
+    setActiveWorkspacePath(path);
+    setWorkspace(next);
+    setWorkspaceStatus(`${path} edited by Codex.`);
   }
 
-  function replaceWorkspace(markdown: string) {
-    setWorkspace(`${markdown.trimEnd()}\n`);
-    setWorkspaceStatus(`${WORKSPACE_PATH} updated by Codex.`);
+  async function replaceWorkspace(
+    markdown: string,
+    path = activeWorkspacePath,
+  ) {
+    const next = `${markdown.trimEnd()}\n`;
+    if (path === activeWorkspacePath) {
+      setWorkspace(next);
+      setWorkspaceStatus(`${path} updated by Codex.`);
+      return;
+    }
+    await writeWorkspaceContent(path, next);
+    setActiveWorkspacePath(path);
+    setWorkspace(next);
+    setWorkspaceStatus(`${path} updated by Codex.`);
   }
 
   function appendCodexMessage(content: string) {
@@ -1030,11 +1276,18 @@ export function CodexWorkspace({
       <section className="codex-workspace-panel">
         <header>
           <div>
-            <p className="eyebrow">Markdown Workspace</p>
-            <h1>{WORKSPACE_PATH}</h1>
+            <p className="eyebrow">Live Scratchpad</p>
+            <h1>{activeWorkspacePath}</h1>
             <p>{workspaceStatus}</p>
           </div>
           <div>
+            <button
+              type="button"
+              title="New scratchpad tab"
+              onClick={() => void createWorkspaceTab("Codex note")}
+            >
+              <Plus size={15} /> New
+            </button>
             {selectedSources.length === 1 ? (
               <button
                 type="button"
@@ -1048,12 +1301,51 @@ export function CodexWorkspace({
             </button>
           </div>
         </header>
+        <div
+          className="codex-workspace-tabs"
+          role="tablist"
+          aria-label="Codex scratchpad tabs"
+        >
+          {workspaceTabs.map((tab) => (
+            <div
+              key={tab.path}
+              className={tab.path === activeWorkspacePath ? "active" : ""}
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={tab.path === activeWorkspacePath}
+                onClick={() => void switchWorkspaceTab(tab.path)}
+              >
+                {tab.title}
+              </button>
+              {workspaceTabs.length > 1 ? (
+                <button
+                  type="button"
+                  aria-label={`Delete ${tab.title}`}
+                  title="Delete tab"
+                  onClick={() => void deleteWorkspaceTab(tab.path)}
+                >
+                  <X size={13} />
+                </button>
+              ) : null}
+            </div>
+          ))}
+        </div>
         <textarea
           aria-label="Codex Markdown workspace"
           value={workspace}
           onChange={(event) => {
-            setWorkspace(event.target.value);
-            setWorkspaceStatus(`${WORKSPACE_PATH} edited.`);
+            const next = event.target.value;
+            setWorkspace(next);
+            setWorkspaceStatus(`${activeWorkspacePath} edited.`);
+            setWorkspaceTabs((current) =>
+              current.map((tab) =>
+                tab.path === activeWorkspacePath
+                  ? { ...tab, title: workspaceTitle(tab.path, next) }
+                  : tab,
+              ),
+            );
           }}
           spellCheck
         />
@@ -1091,7 +1383,12 @@ export function CodexWorkspace({
             </div>
           </div>
           {historyView === "history" ? (
-            <p>Saved conversations from {HISTORY_ROOT}.</p>
+            <div className="codex-history-actions">
+              <p>Saved conversations from {HISTORY_ROOT}.</p>
+              <button type="button" onClick={() => void createNewHistoryChat()}>
+                <Plus size={14} /> New Chat
+              </button>
+            </div>
           ) : null}
         </header>
         {historyView === "history" ? (
@@ -1231,10 +1528,81 @@ function sourceLabel(path: string) {
     : path.replace(/^sources\//, "");
 }
 
+function workspaceTitle(path: string, content: string) {
+  const heading = content.match(/^#\s+(.+)$/m)?.[1]?.trim();
+  if (heading) return heading;
+  if (path === WORKSPACE_PATH) return "Workspace";
+  return (
+    path.split("/").at(-1)?.replace(/\.md$/, "").replace(/-/g, " ") ??
+    "Workspace"
+  );
+}
+
+function uniqueWorkspacePath(title: string, tabs: WorkspaceTab[]) {
+  const existing = new Set(tabs.map((tab) => tab.path));
+  const base = slugifyWorkspaceTitle(title);
+  let path = `${WORKSPACE_TABS_ROOT}/${base}.md`;
+  let suffix = 2;
+  while (existing.has(path)) {
+    path = `${WORKSPACE_TABS_ROOT}/${base}-${suffix}.md`;
+    suffix += 1;
+  }
+  return path;
+}
+
+function slugifyWorkspaceTitle(title: string) {
+  return (
+    title
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-|-$/g, "") || "codex-note"
+  );
+}
+
+function magicWorkspaceTitle(actionTitle: string, scope: string) {
+  const cleanedScope = scope.replace(/\s+/g, " ").trim();
+  return cleanedScope && cleanedScope !== "all sections"
+    ? `${actionTitle}: ${cleanedScope}`
+    : actionTitle;
+}
+
 function magicSectionLabel(paths: string[], titlesByPath: Map<string, string>) {
   if (!paths.length) return "all sections";
   if (paths.length === 1) return titlesByPath.get(paths[0]) ?? paths[0];
   return `${paths.length} sections`;
+}
+
+function normalizeHistoryMessage(message: CodexMessage): CodexMessage {
+  if (message.status === "thinking") return persistableHistoryMessage(message);
+  if (message.role === "codex" && isTransientCodexStatus(message.content)) {
+    return {
+      ...message,
+      content: "Previous Codex turn was interrupted before a response arrived.",
+      status: "done",
+    };
+  }
+  return message;
+}
+
+function persistableHistoryMessage(message: CodexMessage): CodexMessage {
+  if (message.status !== "thinking") return message;
+  return {
+    ...message,
+    content: "Previous Codex turn was interrupted before a response arrived.",
+    status: "done",
+  };
+}
+
+function isTransientCodexStatus(content: string) {
+  return [
+    "Sending this to the local Codex CLI.",
+    "Codex bridge connected.",
+    "Codex turn queued on the warm CLI bridge.",
+    "Codex started. Waiting for the first token.",
+    "Codex is thinking.",
+  ].includes(content.trim());
 }
 
 function codexSourceAccessKey(bookId: string) {

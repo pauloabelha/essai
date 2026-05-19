@@ -62,7 +62,7 @@ The first implementation adds:
 
 - a Codex mode tab
 - a left rail of fixed Codex magic calls for source search, accuracy review, and prose review
-- a central editable `codex/workspace.md` Markdown file where the human and Codex can co-develop research understanding
+- a central editable scratchpad with tabs, starting from `codex/workspace.md` and adding extra notes under `codex/workspace-tabs/`
 - a right Codex message panel proxied to the local `codex` CLI
 - copy buttons for user and Codex messages
 - saved conversation history under `codex/history/`
@@ -74,11 +74,19 @@ The first implementation adds:
 
 Magic call prompts are hardcoded in `src/lib/codex/magic-prompts.ts`. Each magic call opens a small scope selector before sending the prompt: source search selects source files, while accuracy and prose checks select manuscript sections by their Write-mode section names.
 
-The shared Codex workspace lives under:
+The shared Codex scratchpad starts at:
 
 ```txt
 codex/workspace.md
 ```
+
+Additional scratchpad tabs live under:
+
+```txt
+codex/workspace-tabs/
+```
+
+Magic actions create a fresh scratchpad tab before running, so an accuracy or prose pass has a dedicated editable note. Codex sees the active tab and the list of available tabs each turn; it can append to the active tab, replace it, or ask the app to create a new tab for a distinct line of inquiry.
 
 Codex panel histories are saved as JSON under:
 
@@ -217,6 +225,7 @@ projects/
         raw/
     codex/
       workspace.md
+      workspace-tabs/
       cards/
       history/
       sessions/

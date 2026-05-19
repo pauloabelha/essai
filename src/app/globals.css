@@ -1824,7 +1824,7 @@ summary {
 .codex-workspace-panel {
   min-height: 0;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   background: var(--surface);
 }
 
@@ -1851,6 +1851,52 @@ summary {
   flex-wrap: wrap;
   justify-content: end;
   gap: 8px;
+}
+
+.codex-workspace-tabs {
+  min-width: 0;
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--rule);
+  background: color-mix(in srgb, var(--surface) 88%, var(--paper));
+  padding: 7px 10px 0;
+}
+
+.codex-workspace-tabs > div {
+  min-width: 0;
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 7px 7px 0 0;
+  background: transparent;
+}
+
+.codex-workspace-tabs > div.active {
+  border-color: var(--rule);
+  background: var(--surface);
+}
+
+.codex-workspace-tabs button {
+  min-height: 32px;
+  border: 0;
+  background: transparent;
+  padding: 6px 9px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.codex-workspace-tabs [role="tab"] {
+  max-width: 180px;
+  justify-content: flex-start;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.codex-workspace-tabs > div.active button {
+  color: var(--accent);
 }
 
 .codex-workspace-panel > textarea {
@@ -1894,6 +1940,29 @@ summary {
 .codex-chat-title-row > button:hover {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 34%, var(--rule));
+}
+
+.codex-history-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.codex-history-actions p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.codex-history-actions button {
+  min-height: 32px;
+  padding: 6px 9px;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .codex-history-list {
@@ -2327,10 +2396,9 @@ summary {
   }
 
   .app-frame.study-active {
-    grid-template-columns: min(
-        230px,
-        var(--app-study-left-width, 230px)
-      ) 6px minmax(0, 1fr);
+    grid-template-columns:
+      min(230px, var(--app-study-left-width, 230px))
+      6px minmax(0, 1fr);
   }
 
   .codex-workspace {

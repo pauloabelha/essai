@@ -30,13 +30,19 @@ Codex bridges the archive and manuscript structure without mutating manuscript p
 
 ## Research Cards
 
-The first visible Codex object is the central Markdown workspace:
+The first visible Codex object is the central Markdown scratchpad:
 
 ```txt
 codex/workspace.md
 ```
 
-This file is a live collaboration surface. The human can edit it directly; Codex sees the current contents each turn and may append or replace the workspace Markdown when the answer should reorganize the investigation. Codex must preserve useful human text and keep grounded claims tied to visible evidence. Research cards remain a durable future object. A card may represent a note, concept, claim, object, excerpt, source link, chapter reference, or relationship trail. Cards are stored as Markdown under:
+This starts as a live collaboration surface. The human can edit it directly; Codex sees the active tab each turn and may append or replace the workspace Markdown when the answer should reorganize the investigation. Additional scratchpad tabs live under:
+
+```txt
+codex/workspace-tabs/
+```
+
+Magic runs create a fresh tab before sending the prompt, so each accuracy or prose pass can become its own editable note. Codex also sees the tab list and can request a new tab with a workspace-create block when a distinct memo would be cleaner than appending to the current one. Codex must preserve useful human text and keep grounded claims tied to visible evidence. Research cards remain a durable future object. A card may represent a note, concept, claim, object, excerpt, source link, chapter reference, or relationship trail. Cards are stored as Markdown under:
 
 ```txt
 codex/cards/
@@ -98,6 +104,10 @@ Markdown to append.
 <codex-workspace-replace>
 Complete revised workspace Markdown.
 </codex-workspace-replace>
+
+<codex-workspace-create title="Short title">
+Markdown for a new scratchpad tab.
+</codex-workspace-create>
 ```
 
 ## Study Integration

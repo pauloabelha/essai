@@ -64,6 +64,12 @@ test("codex reads project files and commits only center markdown workspace", asy
   await workspace.fill(
     "# Codex Workspace\n\nManual note from the center editor.\n",
   );
+  await page.getByRole("button", { name: "New" }).click();
+  await expect(page.getByRole("tab", { name: "Codex note" })).toBeVisible();
+  await workspace.fill("# Side Inquiry\n\nA separate scratchpad tab.\n");
+  await page.getByRole("button", { name: "Save" }).click();
+  await page.getByRole("tab", { name: "Codex Workspace" }).click();
+  await expect(workspace).toHaveValue(/Manual note from the center editor/);
 
   const codexInput = page.getByRole("textbox", { name: "Codex message" });
 
@@ -109,6 +115,11 @@ test("codex reads project files and commits only center markdown workspace", asy
   await expect(
     page.getByText("/source-note Automatic sequence control matters here."),
   ).toBeVisible();
+  await page.getByRole("button", { name: "New Chat" }).click();
+  await expect(page.getByRole("heading", { name: "Panel" })).toBeVisible();
+  await expect(page.getByText("Codex is ready.")).toBeVisible();
+  await page.getByLabel("Open Codex history").click();
+  await expect(page.getByRole("heading", { name: "History" })).toBeVisible();
   await page
     .getByRole("button", {
       name: /source-note Automatic sequence control matters here/,

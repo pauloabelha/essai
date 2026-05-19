@@ -24,6 +24,8 @@ export interface CodexBridgeTurnInput {
   projectRoot: string;
   message: string;
   workspace: string;
+  workspacePath?: string;
+  workspaceTabs?: Array<{ path: string; title: string }>;
   selectedSources: string[];
   instructions: string;
   history: Array<{ role: string; content: string }>;
@@ -34,6 +36,8 @@ export interface CodexBridgeTurnOutput {
   output: string;
   workspaceAppend: string;
   workspaceReplace: string;
+  workspacePath: string;
+  workspaceCreates: Array<{ title: string; content: string }>;
 }
 
 export interface CodexBridgeTurnEvents {
@@ -103,6 +107,8 @@ class CodexAppServerBridge {
         output: stripWorkspaceBlocks(output).trim(),
         workspaceAppend: extractWorkspaceAppend(output),
         workspaceReplace: extractWorkspaceReplace(output),
+        workspacePath: extractWorkspacePath(output),
+        workspaceCreates: extractWorkspaceCreates(output),
       };
     };
 
@@ -352,6 +358,8 @@ export const codexBridge = new CodexAppServerBridge();
 function buildPrompt({
   message,
   workspace,
+  workspacePath,
+  workspaceTabs,
   selectedSources,
   instructions,
   history,
@@ -367,7 +375,9 @@ function buildPrompt({
 Hard boundaries:
 - You may read manuscript sections, sources, concepts, objects, notes, and Codex files.
 - You must not edit manuscript section files or source ledgers.
-- The center panel is a collaborative Markdown workspace at codex/workspace.md. The human can edit it directly.
+- The center panel is a collaborative Markdown scratchpad with multiple editable tabs. The active tab is ${workspacePath || "codex/workspace.md"}.
+- Existing scratchpad tabs:
+${workspaceTabs?.length ? workspaceTabs.map((tab) => `  - ${tab.title}: ${tab.path}`).join("\n") : "  - Workspace: codex/workspace.md"}
 - If your answer should update that workspace, return one of these blocks:
 <codex-workspace-append>
 ...markdown to append...
@@ -376,7 +386,8 @@ Hard boundaries:
 ...complete revised workspace markdown...
 </codex-workspace-replace>
 - Prefer replace when reorganizing the workspace from the current contents; preserve the author's existing useful text.
-- The web app will apply those blocks only to codex/workspace.md.
+- The web app will apply append/replace blocks to the active tab unless you include <codex-workspace-path>path</codex-workspace-path>.
+- If a new tab is warranted, return <codex-workspace-create title="Short title">...markdown...</codex-workspace-create>; the app will create it and make it current.
 - Mention file paths you used.
 
 Persistent Codex instructions from the user:
@@ -388,7 +399,7 @@ ${selectedSources.length ? selectedSources.map((source) => `- ${source}`).join("
 Study retrieval context from Essai's indexed sources:
 ${studyContext?.trim() || "(no indexed Study passages were attached)"}
 
-Current center Codex workspace:
+Current active Codex scratchpad (${workspacePath || "codex/workspace.md"}):
 ${workspace.slice(0, 12000) || "(empty)"}
 
 Recent panel messages:
@@ -431,11 +442,34 @@ function extractWorkspaceReplace(output: string) {
   return match?.[1]?.trim() ?? "";
 }
 
+function extractWorkspacePath(output: string) {
+  const match = output.match(
+    /<codex-workspace-path>\s*([\s\S]*?)\s*<\/codex-workspace-path>/,
+  );
+  return match?.[1]?.trim() ?? "";
+}
+
+function extractWorkspaceCreates(output: string) {
+  return [
+    ...output.matchAll(
+      /<codex-workspace-create(?:\s+title="([^"]+)")?\s*>\s*([\s\S]*?)\s*<\/codex-workspace-create>/g,
+    ),
+  ].map((match) => ({
+    title: match[1]?.trim() || "Codex note",
+    content: match[2]?.trim() || "",
+  }));
+}
+
 function stripWorkspaceBlocks(output: string) {
   return output
     .replace(/<codex-workspace-append>[\s\S]*?<\/codex-workspace-append>/g, "")
     .replace(
       /<codex-workspace-replace>[\s\S]*?<\/codex-workspace-replace>/g,
+      "",
+    )
+    .replace(/<codex-workspace-path>[\s\S]*?<\/codex-workspace-path>/g, "")
+    .replace(
+      /<codex-workspace-create(?:\s+title="[^"]+")?\s*>[\s\S]*?<\/codex-workspace-create>/g,
       "",
     )
     .replace(/<codex-notes-append>[\s\S]*?<\/codex-notes-append>/g, "");
